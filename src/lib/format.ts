@@ -21,16 +21,24 @@ export function shareUrl(shareId: string) {
   return `${window.location.origin}/s/${shareId}`
 }
 
-/** Guess a title and key from a chart file name, e.g. "Way Maker - E.pdf" or "Goodness_of_God (Ab).pdf". */
+/**
+ * Guess a title and key from a chart file name, e.g. "Way Maker - E.pdf", "Goodness of God (Ab).pdf",
+ * "Agnus Dei-chords-A.pdf" or "graves-into-gardens-E-2.pdf".
+ */
 export function parseChartFileName(fileName: string): { title: string; key: string | null } {
-  let base = fileName.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim()
+  let base = fileName.replace(/\.pdf$/i, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()
   let key: string | null = null
-  const m = base.match(/(?:\s[-–]\s*|\s?\(|\s?\[)([A-G](?:#|b)?m?)[)\]]?$/)
+  const m = base.match(/(?:\s*[-–]\s*|\s?\(|\s?\[)([A-G](?:#|b)?m?)[)\]]?(?:-\d+)?$/)
   if (m) {
     key = m[1]
     base = base.slice(0, m.index).trim()
   }
-  return { title: base.replace(/\s*[-–]\s*$/, '') || fileName, key }
+  base = base.replace(/[-\s]+chords$/i, '').replace(/\s*[-–]\s*$/, '')
+  // Lowercase slugs like "how-he-loves" become "How He Loves".
+  if (base === base.toLowerCase()) {
+    base = base.replace(/-/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase())
+  }
+  return { title: base || fileName, key }
 }
 
 /** Share text for a set, e.g. "Sunday PM – Sun, 11 Oct 2026 · 18:00". */
