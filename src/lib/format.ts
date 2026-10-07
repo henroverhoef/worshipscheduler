@@ -33,17 +33,23 @@ export function parseChartFileName(fileName: string): { title: string; key: stri
   return { title: base.replace(/\s*[-–]\s*$/, '') || fileName, key }
 }
 
-export async function shareLink(title: string, url: string): Promise<'shared' | 'copied' | 'failed'> {
+/** Share text for a set, e.g. "Sunday PM – Sun, 11 Oct 2026 · 18:00". */
+export function shareText(set: { name: string; event_date: string | null; start_time: string | null }) {
+  const when = [formatDate(set.event_date), set.start_time].filter(Boolean).join(' · ')
+  return when ? `${set.name} – ${when}` : set.name
+}
+
+export async function shareLink(title: string, url: string, text?: string): Promise<'shared' | 'copied' | 'failed'> {
   if (navigator.share) {
     try {
-      await navigator.share({ title, url })
+      await navigator.share({ title, text, url })
       return 'shared'
     } catch (e) {
       if ((e as Error).name === 'AbortError') return 'failed'
     }
   }
   try {
-    await navigator.clipboard.writeText(url)
+    await navigator.clipboard.writeText(text ? `${text}\n${url}` : url)
     return 'copied'
   } catch {
     window.prompt('Copy this link:', url)

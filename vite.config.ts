@@ -30,6 +30,7 @@ export default defineConfig({
         globIgnores: ['pdfjs/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
             // Chart PDFs never change in place (a replaced chart gets a new path), so cache-first is safe.

@@ -4,7 +4,7 @@ import SongForm from '../components/SongForm'
 import { useAuth } from '../auth'
 import { supabase } from '../lib/supabase'
 import { fetchSongs } from '../lib/songs'
-import { shareLink, shareUrl } from '../lib/format'
+import { shareLink, shareText, shareUrl } from '../lib/format'
 import { matchesSong } from './Library'
 import type { EventRow, Song } from '../lib/types'
 
@@ -255,7 +255,7 @@ export default function EventEdit() {
 
   async function share() {
     if (!saved) return
-    const r = await shareLink(saved.name, shareUrl(saved.share_id))
+    const r = await shareLink(saved.name, shareUrl(saved.share_id), shareText(saved))
     if (r === 'copied') flash('Link copied')
   }
 

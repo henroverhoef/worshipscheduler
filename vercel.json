@@ -1,5 +1,8 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/((?!assets/|pdfjs/|icons/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/s/:shareId", "destination": "/api/share?id=:shareId" },
+    { "source": "/((?!assets/|pdfjs/|icons/|api/).*)", "destination": "/index.html" }
+  ]
 }

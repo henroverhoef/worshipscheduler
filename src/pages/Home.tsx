@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { supabase } from '../lib/supabase'
-import { formatDate, shareLink, shareUrl, todayIso } from '../lib/format'
+import { formatDate, shareLink, shareText, shareUrl, todayIso } from '../lib/format'
 import { recentSets, forgetSet, type RecentSet } from '../lib/recent'
 import type { EventRow } from '../lib/types'
 
@@ -87,7 +87,7 @@ function SetsDashboard() {
   const past = (events ?? []).filter((e) => e.event_date && e.event_date < today).reverse()
 
   async function share(e: EventRow) {
-    const result = await shareLink(e.name, shareUrl(e.share_id))
+    const result = await shareLink(e.name, shareUrl(e.share_id), shareText(e))
     if (result === 'copied') {
       setToast('Link copied')
       setTimeout(() => setToast(null), 2000)
