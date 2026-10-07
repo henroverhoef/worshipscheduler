@@ -24,6 +24,7 @@ export interface EventRow {
   scripture: string | null
   prayer_points: string | null
   notes: string | null
+  created_by_email: string | null
   created_at: string
   updated_at: string
 }

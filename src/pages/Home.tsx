@@ -59,6 +59,7 @@ function RecentSetsList() {
 }
 
 function SetsDashboard() {
+  const { email: me } = useAuth()
   const [events, setEvents] = useState<(EventRow & { song_count: number })[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showPast, setShowPast] = useState(false)
@@ -101,6 +102,7 @@ function SetsDashboard() {
           {[formatDate(e.event_date), e.start_time, e.location].filter(Boolean).join(' · ')}
           {' · '}
           {e.song_count} {e.song_count === 1 ? 'song' : 'songs'}
+          {e.created_by_email && e.created_by_email !== me && ` · from ${e.created_by_email}`}
         </span>
       </Link>
       <Link to={`/s/${e.share_id}`} className="btn ghost small">View</Link>

@@ -41,7 +41,8 @@ export default function Leaders() {
     <div className="narrow">
       <h1>Leaders</h1>
       <p className="muted">
-        Leaders can add songs and create, edit and share sets. To add a co-leader, put their email here, then ask
+        Leaders share the song library and can create sets. Each set is only visible to the leaders added to
+        it in the set editor. To add a co-leader, put their email here, then ask
         them to <strong>create an account</strong> with that same email on the sign-in page.
       </p>
       <form className="card inline-form" onSubmit={add}>

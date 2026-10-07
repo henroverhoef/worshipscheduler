@@ -6,6 +6,8 @@ Plan worship sets, share them with your team, and play the chord charts like a m
   title and key from the file name (`Way Maker - E.pdf`, `Goodness of God (Ab).pdf`).
 - **Sets**: name, date, time, location, heart for the set, scripture, prayer points, team (who's on what) and
   the song order, with a per-set key and notes for each song. Duplicate a set to reuse it.
+- **Private sets**: a set is only visible (and editable) to the leader who created it and the leaders they add
+  under "Leaders for this set". The song library and the Leaders list are shared by all leaders.
 - **Sharing**: every set has a private link (`/s/…`). Team members need no account and only see that set.
 - **Charts viewer**: all pages of all charts in one swipeable strip (a 3-page and a 2-page chart swipe as 5 pages).
   Tap the left/right edge to turn pages, tap the middle for controls (song list, fit width/page, night mode,

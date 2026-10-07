@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import SongForm from '../components/SongForm'
+import { useAuth } from '../auth'
 import { supabase } from '../lib/supabase'
 import { fetchSongs } from '../lib/songs'
 import { shareLink, shareUrl } from '../lib/format'
@@ -55,6 +56,7 @@ export default function EventEdit() {
   const [params] = useSearchParams()
   const copyFrom = params.get('copy')
   const navigate = useNavigate()
+  const { email: me } = useAuth()
 
   const [fields, setFields] = useState<EventFields>(blankEvent)
   const [saved, setSaved] = useState<EventRow | null>(null)
@@ -67,17 +69,24 @@ export default function EventEdit() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
+  // Leaders who can see and edit this set, besides its creator.
+  const [setLeaders, setSetLeaders] = useState<string[]>([])
+  const [savedSetLeaders, setSavedSetLeaders] = useState<string[]>([])
+  const [allLeaders, setAllLeaders] = useState<string[]>([])
+  const [inviting, setInviting] = useState('')
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const [songs, teamHistory] = await Promise.all([
+      const [songs, teamHistory, leaderRows] = await Promise.all([
         fetchSongs(),
         supabase.from('event_team').select('name, role').limit(1000),
+        supabase.from('leaders').select('email').order('email'),
       ])
       if (cancelled) return
       setLibrary(songs)
+      setAllLeaders((leaderRows.data ?? []).map((l) => l.email as string))
       const hist = teamHistory.data ?? []
       setPastPeople({
         names: [...new Set(hist.map((t) => t.name as string))].sort(),
@@ -88,7 +97,9 @@ export default function EventEdit() {
       if (sourceId) {
         const { data, error } = await supabase
           .from('events')
-          .select('*, event_songs(song_id, position, song_key, notes), event_team(name, role, position)')
+          .select(
+            '*, event_songs(song_id, position, song_key, notes), event_team(name, role, position), event_leaders(email)',
+          )
           .eq('id', sourceId)
           .single()
         if (cancelled) return
@@ -98,6 +109,16 @@ export default function EventEdit() {
           const ev = data as EventRow & {
             event_songs: { song_id: string; position: number; song_key: string | null; notes: string | null }[]
             event_team: { name: string; role: string | null; position: number }[]
+            event_leaders: { email: string }[]
+          }
+          const invited = ev.event_leaders.map((l) => l.email)
+          if (copyFrom) {
+            // The copy belongs to whoever duplicates it; keep the original's leaders on it.
+            const keep = [...invited, ev.created_by_email].filter((e): e is string => !!e && e !== me)
+            setSetLeaders([...new Set(keep)])
+          } else {
+            setSetLeaders(invited)
+            setSavedSetLeaders(invited)
           }
           setFields({
             name: copyFrom ? `${ev.name} (copy)` : ev.name,
@@ -204,6 +225,20 @@ export default function EventEdit() {
       ])
       if (s.error) throw s.error
       if (t.error) throw t.error
+      // Add new set leaders before removing old ones, so the person saving never loses access mid-save.
+      const added = setLeaders.filter((e) => !savedSetLeaders.includes(e))
+      const removed = savedSetLeaders.filter((e) => !setLeaders.includes(e))
+      if (added.length) {
+        const { error } = await supabase
+          .from('event_leaders')
+          .upsert(added.map((email) => ({ event_id: ev.id, email })), { ignoreDuplicates: true })
+        if (error) throw error
+      }
+      if (removed.length) {
+        const { error } = await supabase.from('event_leaders').delete().eq('event_id', ev.id).in('email', removed)
+        if (error) throw error
+      }
+      setSavedSetLeaders(setLeaders)
       setSaved(ev)
       flash('Saved')
       if (!id) navigate(`/sets/${ev.id}`, { replace: true })
@@ -232,6 +267,9 @@ export default function EventEdit() {
   }
 
   if (loading) return <p className="muted">Loading…</p>
+
+  const creator = saved?.created_by_email ?? null
+  const invitable = allLeaders.filter((e) => e !== (creator ?? me) && !setLeaders.includes(e))
 
   return (
     <form className="editor" onSubmit={save}>
@@ -332,6 +370,61 @@ export default function EventEdit() {
           Prayer points
           <textarea rows={4} value={fields.prayer_points} onChange={(e) => set('prayer_points', e.target.value)} />
         </label>
+      </section>
+
+      <section className="card">
+        <h2>Leaders for this set</h2>
+        <p className="muted small">
+          Only these leaders see this set in their app and can edit it. Your team still just gets the share link.
+        </p>
+        <ul className="chips">
+          <li className="chip-item">
+            {creator ?? me}
+            <span className="muted small">{creator && creator !== me ? 'created it' : 'you · created it'}</span>
+          </li>
+          {setLeaders.map((email) => (
+            <li key={email} className="chip-item">
+              {email}
+              {email === me ? (
+                <span className="muted small">you</span>
+              ) : (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={`Remove ${email} from this set`}
+                  onClick={() => setSetLeaders(setLeaders.filter((x) => x !== email))}
+                >
+                  ✕
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+        {invitable.length > 0 ? (
+          <div className="inline-form">
+            <select value={inviting} onChange={(e) => setInviting(e.target.value)} aria-label="Leader to add">
+              <option value="">Add a leader to this set…</option>
+              {invitable.map((email) => (
+                <option key={email} value={email}>{email}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn"
+              disabled={!inviting}
+              onClick={() => {
+                setSetLeaders([...setLeaders, inviting])
+                setInviting('')
+              }}
+            >
+              Add
+            </button>
+          </div>
+        ) : (
+          <p className="muted small">
+            {allLeaders.length <= 1 ? 'Add more leaders on the Leaders page first.' : 'All leaders are on this set.'}
+          </p>
+        )}
       </section>
 
       <section className="card">

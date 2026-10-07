@@ -15,6 +15,18 @@ export default function SharedEvent() {
   const [event, setEvent] = useState<SharedEventData | null>(() => cachedSet(shareId))
   const [status, setStatus] = useState<'loading' | 'ok' | 'offline' | 'missing'>('loading')
   const [viewerAt, setViewerAt] = useState<number | null>(null)
+  const [canEdit, setCanEdit] = useState(false)
+
+  // Leaders only get an Edit button on sets they lead (row level security hides the rest).
+  useEffect(() => {
+    if (!isLeader || !event?.id) return setCanEdit(false)
+    supabase
+      .from('events')
+      .select('id')
+      .eq('id', event.id)
+      .maybeSingle()
+      .then(({ data }) => setCanEdit(!!data))
+  }, [isLeader, event?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -66,7 +78,7 @@ export default function SharedEvent() {
     <div className="shared-page">
       <div className="shared-top">
         <Link to="/" className="btn ghost small">‹ Sets</Link>
-        {isLeader && (
+        {canEdit && (
           <Link to={`/sets/${event.id}`} className="btn ghost small">Edit</Link>
         )}
       </div>
