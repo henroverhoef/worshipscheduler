@@ -14,8 +14,11 @@ Plan worship sets, share them with your team, and play the chord charts like a m
   full screen). Pinch (or double-tap) to zoom and drag to pan around a page; on a laptop use ctrl/trackpad pinch
   or + / − / 0. Bluetooth page-turner pedals work (arrow / page keys). The screen stays awake while it's open.
 - **Download**: a set's page offers all its charts as one combined PDF, in set order.
-- **SongSelect shortcut**: when adding a song, "Find on SongSelect" opens a search for that title on SongSelect.
-  SongSelect has no public API for importing charts, so the PDF is still downloaded there and picked in the form.
+- **SongSelect shortcut**: when adding a song, "Find on SongSelect" opens SongSelect's search for that title.
+  SongSelect has no public API for importing charts, so the PDF is still downloaded there.
+- **Share to the app (Android)**: with the app installed, share one or more PDFs (e.g. a chart just downloaded from
+  SongSelect) and pick Worship Sets: one file opens "Add song" with the chart attached and title/key filled in from
+  the file name; several files can be added in one go. Requires being signed in as a leader.
 - **Offline**: the app installs to the home screen (PWA). Sets and charts a person has opened stay available offline.
 
 ## Stack

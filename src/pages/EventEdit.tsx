@@ -510,6 +510,7 @@ function SongPicker({ library, chosen, onAdd, onCreated, onClose }: PickerProps)
       <SongForm
         song={null}
         initialTitle={query.trim()}
+        library={library}
         onSaved={(song) => {
           onCreated(song)
           onAdd(song)

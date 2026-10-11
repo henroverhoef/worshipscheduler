@@ -19,6 +19,13 @@ export default defineConfig({
         orientation: 'any',
         background_color: '#14121a',
         theme_color: '#14121a',
+        // Lets the installed app appear in the phone's Share menu for PDFs (Android).
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: { files: [{ name: 'charts', accept: ['application/pdf', '.pdf'] }] },
+        },
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -26,6 +33,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['/share-target-sw.js'],
         globPatterns: ['**/*.{js,mjs,css,html,png,svg,ico}'],
         globIgnores: ['pdfjs/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,

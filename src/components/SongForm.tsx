@@ -7,20 +7,25 @@ interface Props {
   song: Song | null
   /** Pre-filled title for a new song (e.g. what was typed in the song search). */
   initialTitle?: string
+  /** Pre-attached chart for a new song (e.g. a PDF shared to the app). */
+  initialFile?: File
+  /** Used to warn when a new song's title is already in the library. */
+  library?: Song[]
   onSaved: (song: Song) => void
   onDeleted: (id: string) => void
   onClose: () => void
 }
 
-export default function SongForm({ song, initialTitle, onSaved, onDeleted, onClose }: Props) {
-  const [title, setTitle] = useState(song?.title ?? initialTitle ?? '')
+export default function SongForm({ song, initialTitle, initialFile, library, onSaved, onDeleted, onClose }: Props) {
+  const guess = initialFile ? parseChartFileName(initialFile.name) : null
+  const [title, setTitle] = useState(song?.title ?? initialTitle ?? guess?.title ?? '')
   const [artist, setArtist] = useState(song?.artist ?? '')
-  const [key, setKey] = useState(song?.song_key ?? '')
+  const [key, setKey] = useState(song?.song_key ?? guess?.key ?? '')
   const [tempo, setTempo] = useState(song?.tempo?.toString() ?? '')
   const [timeSig, setTimeSig] = useState(song?.time_sig ?? '')
   const [tags, setTags] = useState(song?.tags.join(', ') ?? '')
   const [notes, setNotes] = useState(song?.notes ?? '')
-  const [file, setFile] = useState<File | null>(null)
+  const [file, setFile] = useState<File | null>(initialFile ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,6 +37,10 @@ export default function SongForm({ song, initialTitle, onSaved, onDeleted, onClo
       if (guess.key && !key) setKey(guess.key)
     }
   }
+
+  const duplicate = !song && title.trim()
+    ? library?.find((s) => s.title.trim().toLowerCase() === title.trim().toLowerCase())
+    : undefined
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -78,7 +87,7 @@ export default function SongForm({ song, initialTitle, onSaved, onDeleted, onClo
           <h2>{song ? 'Edit song' : 'Add song'}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        {!song && (
+        {!song && !file && (
           <p className="muted small songselect-hint">
             No chart yet?{' '}
             <a
@@ -99,12 +108,25 @@ export default function SongForm({ song, initialTitle, onSaved, onDeleted, onClo
         )}
         <label>
           Chart PDF {song?.pdf_name && !file && <span className="muted small">— current: {song.pdf_name}</span>}
-          <input type="file" accept="application/pdf,.pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
+          {file && initialFile === file ? (
+            <span className="shared-file">
+              📄 {file.name}
+              <button type="button" className="btn ghost small" onClick={() => setFile(null)}>Change</button>
+            </span>
+          ) : (
+            <input type="file" accept="application/pdf,.pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
+          )}
         </label>
         <label>
           Title
           <input required value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
+        {duplicate && (
+          <p className="warn small">
+            “{duplicate.title}”{duplicate.song_key ? ` (${duplicate.song_key})` : ''} is already in the library. Saving
+            adds a second copy — to replace its chart instead, open that song from the Library.
+          </p>
+        )}
         <label>
           Artist
           <input value={artist} onChange={(e) => setArtist(e.target.value)} />

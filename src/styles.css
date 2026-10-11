@@ -280,3 +280,5 @@ input[type='file'] { padding: 8px; }
 .btn.download { width: 100%; margin: -6px 0 16px; }
 .download-note { margin: -8px 0 16px; }
 .songselect-hint { margin: 0; }
+.shared-file { display: flex; align-items: center; gap: 8px; font-weight: 400; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--accent-soft); overflow-wrap: anywhere; }
+.shared-file .btn { margin-left: auto; }

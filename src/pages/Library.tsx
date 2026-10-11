@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import SongForm from '../components/SongForm'
 import { createSong, fetchSongs } from '../lib/songs'
 import { parseChartFileName } from '../lib/format'
+import { takeSharedFiles } from '../lib/sharedFiles'
 import type { Song } from '../lib/types'
 
 // pdf.js is large; load it only when someone opens the charts.
@@ -23,6 +25,29 @@ export default function Library() {
   const [preview, setPreview] = useState<Song | null>(null)
   const [importing, setImporting] = useState<{ done: number; total: number; failed: string[] } | null>(null)
   const bulkInput = useRef<HTMLInputElement>(null)
+  const [params, setParams] = useSearchParams()
+  // PDFs shared to the app from the phone's Share menu.
+  const [sharedFile, setSharedFile] = useState<File | null>(null)
+  const [sharedBatch, setSharedBatch] = useState<File[] | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const shared = params.get('shared')
+    if (!shared) return
+    setParams({}, { replace: true })
+    if (shared === 'failed') {
+      setShareError('That share didn’t come through. Open the app once, then share the PDF to it again.')
+      return
+    }
+    takeSharedFiles().then((files) => {
+      if (files.length === 0) setShareError('No PDF arrived from the share. Try sharing it again.')
+      else if (files.length === 1) {
+        setSharedFile(files[0])
+        setEditing('new')
+      } else setSharedBatch(files)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     fetchSongs().then(setSongs, (e) => setError(e.message))
@@ -38,9 +63,8 @@ export default function Library() {
     setEditing(null)
   }
 
-  async function bulkImport(files: FileList | null) {
-    if (!files?.length) return
-    const all = Array.from(files)
+  async function bulkImport(all: File[]) {
+    if (!all.length) return
     const state = { done: 0, total: all.length, failed: [] as string[] }
     setImporting({ ...state })
     // A few uploads at a time keeps mobile connections happy.
@@ -79,10 +103,34 @@ export default function Library() {
           accept="application/pdf,.pdf"
           multiple
           hidden
-          onChange={(e) => bulkImport(e.target.files)}
+          onChange={(e) => bulkImport(Array.from(e.target.files ?? []))}
         />
       </div>
 
+      {shareError && (
+        <div className="card notice-card">
+          {shareError}{' '}
+          <button className="btn ghost small" onClick={() => setShareError(null)}>Dismiss</button>
+        </div>
+      )}
+      {sharedBatch && (
+        <div className="card notice-card">
+          <strong>{sharedBatch.length} charts shared to the app:</strong>{' '}
+          {sharedBatch.map((f) => f.name).join(', ')}
+          <div className="actions" style={{ marginTop: 10 }}>
+            <button
+              className="btn primary small"
+              onClick={() => {
+                bulkImport(sharedBatch)
+                setSharedBatch(null)
+              }}
+            >
+              Add all to library
+            </button>
+            <button className="btn ghost small" onClick={() => setSharedBatch(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {importing && (
         <div className="card notice-card">
           {importing.done < importing.total
@@ -132,12 +180,20 @@ export default function Library() {
       {editing && (
         <SongForm
           song={editing === 'new' ? null : editing}
-          onSaved={upsertLocal}
+          initialFile={editing === 'new' ? sharedFile ?? undefined : undefined}
+          library={songs ?? []}
+          onSaved={(song) => {
+            setSharedFile(null)
+            upsertLocal(song)
+          }}
           onDeleted={(id) => {
             setSongs((list) => (list ?? []).filter((s) => s.id !== id))
             setEditing(null)
           }}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setSharedFile(null)
+            setEditing(null)
+          }}
         />
       )}
       {preview && (

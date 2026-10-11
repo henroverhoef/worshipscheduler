@@ -33,7 +33,8 @@ export function parseChartFileName(fileName: string): { title: string; key: stri
     key = m[1]
     base = base.slice(0, m.index).trim()
   }
-  base = base.replace(/[-\s]+chords$/i, '').replace(/\s*[-–]\s*$/, '')
+  // Chart-type suffixes SongSelect and others add, e.g. "-chords" or "-numbers".
+  base = base.replace(/[-\s]+(chords?|numbers?|nashville|lead ?sheet|lead|vocal|lyrics)$/i, '').replace(/\s*[-–]\s*$/, '')
   // Lowercase slugs like "how-he-loves" become "How He Loves".
   if (base === base.toLowerCase()) {
     base = base.replace(/-/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase())
@@ -65,10 +66,7 @@ export async function shareLink(title: string, url: string, text?: string): Prom
   }
 }
 
-/**
- * Web search limited to SongSelect, which lands on the song's SongSelect page (sign in there to download).
- * SongSelect has no public API for pulling charts into other apps, so this is a shortcut, not an import.
- */
+/** SongSelect's own search for a title (sign in there to download the chart). */
 export function songSelectSearchUrl(title: string) {
-  return `https://www.google.com/search?q=${encodeURIComponent(`site:songselect.ccli.com ${title.trim()}`)}`
+  return `https://songselect.ccli.com/search/results?search=${encodeURIComponent(title.trim())}&cat=all`
 }
