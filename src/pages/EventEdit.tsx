@@ -4,7 +4,7 @@ import SongForm from '../components/SongForm'
 import { useAuth } from '../auth'
 import { supabase } from '../lib/supabase'
 import { fetchSongs } from '../lib/songs'
-import { shareLink, shareText, shareUrl } from '../lib/format'
+import { shareLink, shareText, shareUrl, songSelectSearchUrl } from '../lib/format'
 import { matchesSong } from './Library'
 import type { EventRow, Song } from '../lib/types'
 
@@ -509,6 +509,7 @@ function SongPicker({ library, chosen, onAdd, onCreated, onClose }: PickerProps)
     return (
       <SongForm
         song={null}
+        initialTitle={query.trim()}
         onSaved={(song) => {
           onCreated(song)
           onAdd(song)
@@ -550,7 +551,17 @@ function SongPicker({ library, chosen, onAdd, onCreated, onClose }: PickerProps)
             )
           })}
         </ul>
-        <button type="button" className="btn ghost" onClick={() => setCreating(true)}>+ New song not in library</button>
+        {query.trim() && (
+          <p className="muted small songselect-hint">
+            Not in your library?{' '}
+            <a href={songSelectSearchUrl(query)} target="_blank" rel="noreferrer">
+              Find “{query.trim()}” on SongSelect ↗
+            </a>
+          </p>
+        )}
+        <button type="button" className="btn ghost" onClick={() => setCreating(true)}>
+          + New song{query.trim() ? ` “${query.trim()}”` : ' not in library'}
+        </button>
       </div>
     </div>
   )

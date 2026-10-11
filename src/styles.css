@@ -204,7 +204,7 @@ input[type='file'] { padding: 8px; }
 .team .role { width: 40%; color: var(--muted); flex: none; }
 
 /* Viewer */
-.viewer { position: fixed; inset: 0; z-index: 100; background: #fff; color: #111; touch-action: pan-x pan-y pinch-zoom; }
+.viewer { position: fixed; inset: 0; z-index: 100; background: #fff; color: #111; touch-action: pan-x pan-y; }
 .viewer.night { background: #000; }
 .viewer.night .viewer-page { filter: invert(1) hue-rotate(180deg); }
 .viewer-loading { display: grid; place-items: center; height: 100%; color: #666; }
@@ -213,13 +213,17 @@ input[type='file'] { padding: 8px; }
   scroll-snap-type: x mandatory; overscroll-behavior: contain; scrollbar-width: none;
 }
 .viewer-track::-webkit-scrollbar { display: none; }
+.viewer-track.zoomed { overflow-x: hidden; }
+/* Each slide scrolls on its own when its page is bigger than the screen (fit width, or zoomed in).
+   Auto margins centre the page without cutting off its left/top edge when it overflows. */
 .viewer-slide {
   flex: 0 0 100%; height: 100%; scroll-snap-align: start; scroll-snap-stop: always;
-  display: flex; justify-content: center; align-items: center; overflow: hidden;
+  display: flex; position: relative; overflow: auto; overscroll-behavior-y: contain; scrollbar-width: none;
 }
-.viewer-slide.fit-width { align-items: flex-start; overflow-y: auto; }
-.viewer-page { display: block; background: #fff; }
-.viewer-missing { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #666; text-align: center; padding: 24px; }
+.viewer-slide::-webkit-scrollbar { display: none; }
+.viewer-slide.zoomed { overscroll-behavior: contain; }
+.viewer-page { display: block; background: #fff; margin: auto; flex: none; }
+.viewer-missing { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #666; text-align: center; padding: 24px; }
 .viewer-missing strong { font-size: 1.4rem; color: #222; }
 .viewer.night .viewer-missing strong { color: #eee; }
 
@@ -246,6 +250,11 @@ input[type='file'] { padding: 8px; }
   background: rgb(20 18 26 / 0.55); color: #fff; font-size: 0.8rem; pointer-events: none; font-variant-numeric: tabular-nums;
 }
 .viewer-progress { left: 50%; transform: translateX(-50%); }
+.viewer-zoom {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(8px, env(safe-area-inset-bottom)) + 64px);
+  border: 0; border-radius: 999px; padding: 8px 16px; background: rgb(20 18 26 / 0.85); color: #fff;
+  font-weight: 600; font-size: 0.9rem; cursor: pointer; font-variant-numeric: tabular-nums; z-index: 2;
+}
 .viewer-progress.hidden { display: none; }
 .viewer-next { right: 10px; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .viewer-songs {
@@ -268,3 +277,6 @@ input[type='file'] { padding: 8px; }
 }
 .chip-item .muted { font-weight: 400; padding-right: 8px; }
 .chip-item .icon-btn { width: 28px; height: 28px; font-size: 0.85rem; }
+.btn.download { width: 100%; margin: -6px 0 16px; }
+.download-note { margin: -8px 0 16px; }
+.songselect-hint { margin: 0; }

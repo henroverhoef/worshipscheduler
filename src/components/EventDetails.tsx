@@ -4,9 +4,13 @@ import type { SharedEvent } from '../lib/types'
 interface Props {
   event: SharedEvent
   onOpenSong: (index: number) => void
+  onDownload: () => void
+  /** Progress text while the combined PDF is being prepared. */
+  downloading: string | null
+  downloadNote: string | null
 }
 
-export default function EventDetails({ event, onOpenSong }: Props) {
+export default function EventDetails({ event, onOpenSong, onDownload, downloading, downloadNote }: Props) {
   const when = [formatDate(event.event_date, { weekday: 'long', year: 'numeric' }), event.start_time]
     .filter(Boolean)
     .join(' · ')
@@ -20,9 +24,17 @@ export default function EventDetails({ event, onOpenSong }: Props) {
       </header>
 
       {event.songs.length > 0 && (
-        <button className="btn primary big" onClick={() => onOpenSong(0)}>
-          Open charts ▸
-        </button>
+        <>
+          <button className="btn primary big" onClick={() => onOpenSong(0)}>
+            Open charts ▸
+          </button>
+          {event.songs.some((s) => s.pdf_path) && (
+            <button className="btn download" onClick={onDownload} disabled={!!downloading}>
+              {downloading ?? '⤓ Download all charts as one PDF'}
+            </button>
+          )}
+          {downloadNote && <p className="notice small download-note">{downloadNote}</p>}
+        </>
       )}
 
       {event.heart && (

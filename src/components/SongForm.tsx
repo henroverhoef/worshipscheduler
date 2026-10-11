@@ -1,17 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { createSong, deleteSong, songUsage, updateSong, type SongInput } from '../lib/songs'
-import { parseChartFileName } from '../lib/format'
+import { parseChartFileName, songSelectSearchUrl } from '../lib/format'
 import type { Song } from '../lib/types'
 
 interface Props {
   song: Song | null
+  /** Pre-filled title for a new song (e.g. what was typed in the song search). */
+  initialTitle?: string
   onSaved: (song: Song) => void
   onDeleted: (id: string) => void
   onClose: () => void
 }
 
-export default function SongForm({ song, onSaved, onDeleted, onClose }: Props) {
-  const [title, setTitle] = useState(song?.title ?? '')
+export default function SongForm({ song, initialTitle, onSaved, onDeleted, onClose }: Props) {
+  const [title, setTitle] = useState(song?.title ?? initialTitle ?? '')
   const [artist, setArtist] = useState(song?.artist ?? '')
   const [key, setKey] = useState(song?.song_key ?? '')
   const [tempo, setTempo] = useState(song?.tempo?.toString() ?? '')
@@ -76,6 +78,25 @@ export default function SongForm({ song, onSaved, onDeleted, onClose }: Props) {
           <h2>{song ? 'Edit song' : 'Add song'}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
+        {!song && (
+          <p className="muted small songselect-hint">
+            No chart yet?{' '}
+            <a
+              href={songSelectSearchUrl(title || 'chord chart')}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => {
+                if (!title.trim()) {
+                  e.preventDefault()
+                  setError('Type the song title first, then tap Find on SongSelect.')
+                }
+              }}
+            >
+              Find {title.trim() ? `“${title.trim()}”` : 'it'} on SongSelect ↗
+            </a>
+            , download the PDF there, then pick it below.
+          </p>
+        )}
         <label>
           Chart PDF {song?.pdf_name && !file && <span className="muted small">— current: {song.pdf_name}</span>}
           <input type="file" accept="application/pdf,.pdf" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />

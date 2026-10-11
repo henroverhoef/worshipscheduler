@@ -5,6 +5,12 @@ import type { SetSong } from '../lib/types'
 
 type Fit = 'page' | 'width'
 
+const MAX_ZOOM = 5
+// Stay under mobile browsers' canvas size limits (iOS Safari caps around 16.7M pixels).
+const MAX_CANVAS_PIXELS = 12_000_000
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
 interface Slide {
   songIndex: number
   pageNo: number // 1-based page in its PDF
@@ -49,6 +55,14 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
   const [fit, setFit] = useState<Fit>(() => readPref<Fit>('ws.fit', 'page'))
   const [night, setNight] = useState(() => readPref<string>('ws.night', 'off') === 'on')
   const [showSongs, setShowSongs] = useState(false)
+  // Zoom of the current page (1 = fitted). The zoomed page pans with normal scrolling inside its slide.
+  const [zoom, setZoom] = useState(1)
+  const zoomRef = useRef(1)
+  // Keeps the point of the page under the fingers (fx, fy as fractions of the page) at screen point (mx, my).
+  const anchor = useRef<{ fx: number; fy: number; mx: number; my: number } | null>(null)
+  const suppressTapUntil = useRef(0)
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // Load every chart and flatten into one page list (keyed on content so a new array identity doesn't reload).
   const songsKey = songs.map((s) => `${s.id}:${s.pdf_path ?? ''}`).join('|')
@@ -91,12 +105,124 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
       const track = trackRef.current
       if (!track || !slides) return
       const clamped = Math.max(0, Math.min(slides.length - 1, index))
+      resetZoom()
       track.scrollTo({ left: clamped * track.clientWidth, behavior: smooth ? 'smooth' : 'auto' })
       currentRef.current = clamped
       setCurrent(clamped)
     },
     [slides],
   )
+
+  function activePage(): { slide: HTMLElement; page: HTMLElement } | null {
+    const slide = trackRef.current?.children[currentRef.current] as HTMLElement | undefined
+    const page = slide?.firstElementChild as HTMLElement | null | undefined
+    return slide && page instanceof HTMLCanvasElement ? { slide, page } : null
+  }
+
+  function resetZoom() {
+    anchor.current = null
+    if (zoomRef.current === 1) return
+    zoomRef.current = 1
+    setZoom(1)
+  }
+
+  /** Zoom the current page to `next`, keeping the page point under (clientX, clientY) in place. */
+  function zoomAt(next: number, clientX: number, clientY: number, frac?: { fx: number; fy: number }) {
+    const active = activePage()
+    if (!active) return
+    const slideRect = active.slide.getBoundingClientRect()
+    let fx = frac?.fx
+    let fy = frac?.fy
+    if (fx === undefined || fy === undefined) {
+      const r = active.page.getBoundingClientRect()
+      fx = clamp((clientX - r.left) / r.width, 0, 1)
+      fy = clamp((clientY - r.top) / r.height, 0, 1)
+    }
+    anchor.current = { fx, fy, mx: clientX - slideRect.left, my: clientY - slideRect.top }
+    const z = clamp(next, 1, MAX_ZOOM)
+    if (z === zoomRef.current) {
+      applyAnchor() // e.g. two-finger pan at max zoom
+    } else {
+      zoomRef.current = z
+      setZoom(z)
+    }
+  }
+
+  function applyAnchor() {
+    const a = anchor.current
+    const active = activePage()
+    if (!a || !active) return
+    const { slide, page } = active
+    slide.scrollLeft = page.offsetLeft + a.fx * page.offsetWidth - a.mx
+    slide.scrollTop = page.offsetTop + a.fy * page.offsetHeight - a.my
+  }
+
+  // After the page has its new size, scroll so the pinch point stays under the fingers.
+  useLayoutEffect(() => {
+    applyAnchor()
+    if (zoom === 1) anchor.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom])
+
+  // Pinch to zoom (touch) and ctrl/trackpad-pinch wheel (desktop). The browser's own page zoom is
+  // turned off in the viewer: it fought the page-swipe strip and snapped back to the left edge.
+  useEffect(() => {
+    const track = trackRef.current
+    if (!track) return
+    let pinch: { dist: number; zoom: number; fx: number; fy: number } | null = null
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const mid = (t: TouchList) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 })
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length !== 2) return
+      const active = activePage()
+      if (!active) return
+      if (e.cancelable) e.preventDefault()
+      const m = mid(e.touches)
+      const r = active.page.getBoundingClientRect()
+      pinch = {
+        dist: dist(e.touches),
+        zoom: zoomRef.current,
+        fx: clamp((m.x - r.left) / r.width, 0, 1),
+        fy: clamp((m.y - r.top) / r.height, 0, 1),
+      }
+    }
+    function onTouchMove(e: TouchEvent) {
+      if (!pinch || e.touches.length !== 2) return
+      if (e.cancelable) e.preventDefault()
+      const m = mid(e.touches)
+      zoomAt((pinch.zoom * dist(e.touches)) / pinch.dist, m.x, m.y, { fx: pinch.fx, fy: pinch.fy })
+    }
+    function onTouchEnd(e: TouchEvent) {
+      if (!pinch || e.touches.length >= 2) return
+      pinch = null
+      suppressTapUntil.current = Date.now() + 400
+      if (zoomRef.current < 1.08) resetZoom()
+    }
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      zoomAt(zoomRef.current * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY)
+    }
+    // iOS Safari: stop its own page zoom gesture.
+    const stop = (e: Event) => e.preventDefault()
+
+    track.addEventListener('touchstart', onTouchStart, { passive: false })
+    track.addEventListener('touchmove', onTouchMove, { passive: false })
+    track.addEventListener('touchend', onTouchEnd)
+    track.addEventListener('touchcancel', onTouchEnd)
+    track.addEventListener('wheel', onWheel, { passive: false })
+    document.addEventListener('gesturestart', stop)
+    return () => {
+      track.removeEventListener('touchstart', onTouchStart)
+      track.removeEventListener('touchmove', onTouchMove)
+      track.removeEventListener('touchend', onTouchEnd)
+      track.removeEventListener('touchcancel', onTouchEnd)
+      track.removeEventListener('wheel', onWheel)
+      document.removeEventListener('gesturestart', stop)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slides])
 
   // Jump to the requested song once pages are known.
   useLayoutEffect(() => {
@@ -109,6 +235,7 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
     const track = trackRef.current
     if (!track) return
     const ro = new ResizeObserver(() => {
+      resetZoom()
       setSize({ w: track.clientWidth, h: track.clientHeight })
       track.scrollTo({ left: currentRef.current * track.clientWidth })
     })
@@ -135,8 +262,17 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
       } else if (['ArrowLeft', 'PageUp', 'ArrowUp', 'Backspace'].includes(e.key)) {
         e.preventDefault()
         goTo(currentRef.current - 1)
+      } else if (e.key === 'Escape' && zoomRef.current > 1) {
+        resetZoom()
       } else if (e.key === 'Escape' && !document.fullscreenElement) {
         onClose()
+      } else if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '0') {
+        const track = trackRef.current
+        if (!track) return
+        const r = track.getBoundingClientRect()
+        const next = e.key === '0' ? 1 : zoomRef.current * (e.key === '-' ? 1 / 1.25 : 1.25)
+        if (next <= 1) resetZoom()
+        else zoomAt(next, r.left + r.width / 2, r.top + r.height / 2)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -180,10 +316,25 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
   }, [slides])
 
   function onTap(e: MouseEvent) {
+    if (Date.now() < suppressTapUntil.current) return
+    const zoomed = zoomRef.current > 1
     const x = e.clientX / window.innerWidth
-    if (x < 0.28) goTo(currentRef.current - 1)
-    else if (x > 0.72) goTo(currentRef.current + 1)
-    else setChrome((c) => !c)
+    // Edges turn pages, but not while zoomed in (a tap there is just looking at the page).
+    if (!zoomed && x < 0.28) return goTo(currentRef.current - 1)
+    if (!zoomed && x > 0.72) return goTo(currentRef.current + 1)
+    // Middle: single tap shows/hides controls, double tap zooms in or back out.
+    const now = Date.now()
+    const last = lastTap.current
+    if (last && now - last.t < 300 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 40) {
+      clearTimeout(tapTimer.current)
+      lastTap.current = null
+      if (zoomed) resetZoom()
+      else zoomAt(2.5, e.clientX, e.clientY)
+      return
+    }
+    lastTap.current = { t: now, x: e.clientX, y: e.clientY }
+    clearTimeout(tapTimer.current)
+    tapTimer.current = setTimeout(() => setChrome((c) => !c), 260)
   }
 
   function toggleFit() {
@@ -209,9 +360,9 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
       {!slides ? (
         <div className="viewer-loading">Loading charts…</div>
       ) : (
-        <div ref={trackRef} className="viewer-track" onScroll={onScroll} onClick={onTap}>
+        <div ref={trackRef} className={`viewer-track ${zoom > 1 ? 'zoomed' : ''}`} onScroll={onScroll} onClick={onTap}>
           {slides.map((s, i) => (
-            <div className={`viewer-slide fit-${fit}`} key={`${s.songIndex}-${s.pageNo}`}>
+            <div className={`viewer-slide ${i === current && zoom > 1 ? 'zoomed' : ''}`} key={`${s.songIndex}-${s.pageNo}`}>
               {s.doc ? (
                 <PageCanvas
                   doc={s.doc}
@@ -219,6 +370,7 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
                   width={size.w}
                   height={size.h}
                   fit={fit}
+                  zoom={i === current ? zoom : 1}
                   active={Math.abs(i - current) <= 2}
                 />
               ) : (
@@ -232,7 +384,12 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
         </div>
       )}
 
-      {slides && slides.length > 0 && (
+      {zoom > 1 && (
+        <button className="viewer-zoom" onClick={resetZoom} aria-label="Reset zoom">
+          {zoom.toFixed(1)}× · Reset
+        </button>
+      )}
+      {slides && slides.length > 0 && zoom === 1 && (
         <div className={`viewer-progress ${chrome ? 'hidden' : ''}`}>
           {current + 1}/{slides.length}
         </div>
@@ -294,51 +451,81 @@ interface PageProps {
   width: number
   height: number
   fit: Fit
+  zoom: number
   active: boolean
 }
 
-function PageCanvas({ doc, pageNo, width, height, fit, active }: PageProps) {
+function PageCanvas({ doc, pageNo, width, height, fit, zoom, active }: PageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [cssSize, setCssSize] = useState<{ w: number; h: number } | null>(null)
+  const [base, setBase] = useState<{ w: number; h: number } | null>(null)
+  // While pinching, only the CSS size follows the fingers; the sharp re-render waits until they settle.
+  const [renderZoom, setRenderZoom] = useState(zoom)
+
+  useEffect(() => {
+    if (zoom === 1) return setRenderZoom(1)
+    const t = setTimeout(() => setRenderZoom(zoom), 180)
+    return () => clearTimeout(t)
+  }, [zoom])
+
+  useEffect(() => {
+    let cancelled = false
+    doc.getPage(pageNo).then((page) => {
+      if (cancelled) return
+      const vp = page.getViewport({ scale: 1 })
+      setBase({ w: vp.width, h: vp.height })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [doc, pageNo])
+
+  const fitScale = base && width && height
+    ? fit === 'width' ? width / base.w : Math.min(width / base.w, height / base.h)
+    : 0
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !width || !height) return
+    if (!canvas || !base || !fitScale) return
+    if (!active) {
+      // Free memory for pages far from view; the CSS size keeps the layout box.
+      canvas.width = 0
+      canvas.height = 0
+      return
+    }
     let cancelled = false
     let task: { cancel: () => void; promise: Promise<void> } | null = null
-
     doc.getPage(pageNo).then((page) => {
       if (cancelled) return
-      const base = page.getViewport({ scale: 1 })
-      const scale = fit === 'width' ? width / base.width : Math.min(width / base.width, height / base.height)
-      const w = Math.floor(base.width * scale)
-      const h = Math.floor(base.height * scale)
-      setCssSize({ w, h })
-      if (!active) {
-        // Free memory for pages far from view; keep the layout box.
-        canvas.width = 0
-        canvas.height = 0
-        return
-      }
       const dpr = Math.min(window.devicePixelRatio || 1, 3)
-      const viewport = page.getViewport({ scale: scale * dpr })
-      canvas.width = Math.floor(viewport.width)
-      canvas.height = Math.floor(viewport.height)
-      task = page.render({ canvas, viewport })
-      task.promise.catch(() => {})
+      let scale = fitScale * renderZoom * dpr
+      const pixels = base.w * base.h * scale * scale
+      if (pixels > MAX_CANVAS_PIXELS) scale *= Math.sqrt(MAX_CANVAS_PIXELS / pixels)
+      const viewport = page.getViewport({ scale })
+      // Render off-screen, then swap in, so the page never flashes blank while re-rendering.
+      const off = document.createElement('canvas')
+      off.width = Math.floor(viewport.width)
+      off.height = Math.floor(viewport.height)
+      task = page.render({ canvas: off, viewport })
+      task.promise
+        .then(() => {
+          if (cancelled) return
+          canvas.width = off.width
+          canvas.height = off.height
+          canvas.getContext('2d')?.drawImage(off, 0, 0)
+        })
+        .catch(() => {})
     })
-
     return () => {
       cancelled = true
       task?.cancel()
     }
-  }, [doc, pageNo, width, height, fit, active])
+  }, [doc, pageNo, base, fitScale, renderZoom, active])
 
   return (
     <canvas
       ref={canvasRef}
       className="viewer-page"
-      style={cssSize ? { width: cssSize.w, height: cssSize.h } : undefined}
+      style={base && fitScale ? { width: Math.floor(base.w * fitScale * zoom), height: Math.floor(base.h * fitScale * zoom) } : undefined}
     />
   )
 }

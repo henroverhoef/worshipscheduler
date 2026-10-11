@@ -16,6 +16,25 @@ export default function SharedEvent() {
   const [status, setStatus] = useState<'loading' | 'ok' | 'offline' | 'missing'>('loading')
   const [viewerAt, setViewerAt] = useState<number | null>(null)
   const [canEdit, setCanEdit] = useState(false)
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [downloadNote, setDownloadNote] = useState<string | null>(null)
+
+  async function downloadCharts() {
+    if (!event) return
+    setDownloadNote(null)
+    setDownloading('Preparing PDF…')
+    try {
+      const { mergeCharts, saveBlob, pdfFileName } = await import('../lib/mergePdf')
+      const { blob, skipped } = await mergeCharts(event.name, event.songs, (done, total) =>
+        setDownloading(`Preparing PDF… ${done}/${total}`),
+      )
+      saveBlob(blob, pdfFileName(event.name, event.event_date))
+      if (skipped.length) setDownloadNote(`Not included (no chart or couldn’t load): ${skipped.join(', ')}`)
+    } catch (e) {
+      setDownloadNote((e as Error).message || 'Couldn’t create the PDF. Check your connection and try again.')
+    }
+    setDownloading(null)
+  }
 
   // Leaders only get an Edit button on sets they lead (row level security hides the rest).
   useEffect(() => {
@@ -83,7 +102,13 @@ export default function SharedEvent() {
         )}
       </div>
       {status === 'offline' && <p className="notice narrow">You’re offline — showing the last saved copy of this set.</p>}
-      <EventDetails event={event} onOpenSong={(i) => setViewerAt(i)} />
+      <EventDetails
+        event={event}
+        onOpenSong={(i) => setViewerAt(i)}
+        onDownload={downloadCharts}
+        downloading={downloading}
+        downloadNote={downloadNote}
+      />
       {viewerAt !== null && (
         <Suspense fallback={<div className="viewer"><div className="viewer-loading">Loading charts…</div></div>}>
           <Viewer songs={event.songs} startSong={viewerAt} onClose={() => setViewerAt(null)} />

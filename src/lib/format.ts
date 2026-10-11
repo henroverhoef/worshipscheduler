@@ -64,3 +64,11 @@ export async function shareLink(title: string, url: string, text?: string): Prom
     return 'copied'
   }
 }
+
+/**
+ * Web search limited to SongSelect, which lands on the song's SongSelect page (sign in there to download).
+ * SongSelect has no public API for pulling charts into other apps, so this is a shortcut, not an import.
+ */
+export function songSelectSearchUrl(title: string) {
+  return `https://www.google.com/search?q=${encodeURIComponent(`site:songselect.ccli.com ${title.trim()}`)}`
+}
