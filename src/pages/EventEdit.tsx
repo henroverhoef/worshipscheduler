@@ -239,6 +239,14 @@ export default function EventEdit() {
         if (error) throw error
       }
       setSavedSetLeaders(setLeaders)
+      // A duplicated set starts with the original's chart markings.
+      if (!saved && copyFrom) {
+        const { data: rows } = await supabase.from('set_annotations').select('song_id, page, items').eq('event_id', copyFrom)
+        if (rows?.length) {
+          const { error } = await supabase.from('set_annotations').insert(rows.map((r) => ({ ...r, event_id: ev.id })))
+          if (error) window.alert('The set was saved, but its chart markings couldn’t be copied.')
+        }
+      }
       setSaved(ev)
       flash('Saved')
       if (!id) navigate(`/sets/${ev.id}`, { replace: true })

@@ -1,5 +1,16 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import MarkLayer from './MarkLayer'
 import { loadPdf, type PdfDoc } from '../lib/pdf'
+import {
+  HL_COLORS,
+  PEN_COLORS,
+  createMarkSaver,
+  markKey,
+  type Mark,
+  type MarksByPage,
+  type MarkTool,
+  type SaveStatus,
+} from '../lib/marks'
 import { chartUrl } from '../lib/supabase'
 import type { SetSong } from '../lib/types'
 
@@ -23,6 +34,10 @@ interface Props {
   songs: SetSong[]
   startSong?: number
   onClose: () => void
+  /** The set's markings, shown over the charts. */
+  marks?: MarksByPage
+  /** Present when the viewer may edit this set's markings (the set's leaders). */
+  markup?: { eventId: string; onMarksChange: (marks: MarksByPage) => void }
 }
 
 function readPref<T extends string>(key: string, fallback: T): T {
@@ -44,7 +59,7 @@ function writePref(key: string, value: string) {
  * Music-stand style viewer: every page of every chart in the set laid out in one
  * horizontal strip, so a 3-page and a 2-page chart swipe like a single 5-page book.
  */
-export default function Viewer({ songs, startSong = 0, onClose }: Props) {
+export default function Viewer({ songs, startSong = 0, onClose, marks: initialMarks, markup }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const [slides, setSlides] = useState<Slide[] | null>(null)
@@ -63,6 +78,23 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
   const suppressTapUntil = useRef(0)
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   const tapTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  // Markup (pen, marker, text) on this set's charts.
+  const [marks, setMarks] = useState<MarksByPage>(() => initialMarks ?? {})
+  const [marking, setMarking] = useState(false)
+  const markingRef = useRef(false)
+  markingRef.current = marking
+  const [tool, setTool] = useState<MarkTool>('pen')
+  const [penColor, setPenColor] = useState(PEN_COLORS[0])
+  const [hlColor, setHlColor] = useState(HL_COLORS[0])
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const history = useRef(new Map<string, Mark[][]>())
+  const saver = useMemo(() => (markup ? createMarkSaver(markup.eventId, setSaveStatus) : null), [markup?.eventId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => saver?.dispose(), [saver])
+  const onMarksChange = markup?.onMarksChange
+  useEffect(() => {
+    onMarksChange?.(marks)
+  }, [marks, onMarksChange])
 
   // Load every chart and flatten into one page list (keyed on content so a new array identity doesn't reload).
   const songsKey = songs.map((s) => `${s.id}:${s.pdf_path ?? ''}`).join('|')
@@ -116,7 +148,7 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
   function activePage(): { slide: HTMLElement; page: HTMLElement } | null {
     const slide = trackRef.current?.children[currentRef.current] as HTMLElement | undefined
     const page = slide?.firstElementChild as HTMLElement | null | undefined
-    return slide && page instanceof HTMLCanvasElement ? { slide, page } : null
+    return slide && page?.classList.contains('viewer-pagebox') ? { slide, page } : null
   }
 
   function resetZoom() {
@@ -256,6 +288,7 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
   // Keyboard and Bluetooth page-turner pedals (they send arrow / page keys).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if ((e.target as HTMLElement | null)?.closest?.('input, textarea')) return
       if (['ArrowRight', 'PageDown', ' ', 'ArrowDown', 'Enter'].includes(e.key)) {
         e.preventDefault()
         goTo(currentRef.current + 1)
@@ -265,7 +298,7 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
       } else if (e.key === 'Escape' && zoomRef.current > 1) {
         resetZoom()
       } else if (e.key === 'Escape' && !document.fullscreenElement) {
-        onClose()
+        close()
       } else if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '0') {
         const track = trackRef.current
         if (!track) return
@@ -277,7 +310,8 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [goTo, onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goTo, onClose, saver])
 
   // Keep the screen awake while charts are open.
   useEffect(() => {
@@ -311,12 +345,22 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
   // Hide controls shortly after opening so the chart gets the whole screen.
   useEffect(() => {
     if (!slides) return
-    const t = setTimeout(() => setChrome(false), 2500)
+    const t = setTimeout(() => !markingRef.current && setChrome(false), 2500)
     return () => clearTimeout(t)
   }, [slides])
 
+  // Match the phone's status bar to the chart (installed app), and restore it on close.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]')
+    const prev = meta?.getAttribute('content')
+    meta?.setAttribute('content', night ? '#000000' : '#ffffff')
+    return () => {
+      if (prev) meta?.setAttribute('content', prev)
+    }
+  }, [night])
+
   function onTap(e: MouseEvent) {
-    if (Date.now() < suppressTapUntil.current) return
+    if (marking || Date.now() < suppressTapUntil.current) return
     const zoomed = zoomRef.current > 1
     const x = e.clientX / window.innerWidth
     // Edges turn pages, but not while zoomed in (a tap there is just looking at the page).
@@ -346,9 +390,49 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
     setNight(!night)
     writePref('ws.night', night ? 'off' : 'on')
   }
-  function toggleFullscreen() {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-    else rootRef.current?.requestFullscreen?.().catch(() => {})
+  function startMarking() {
+    resetZoom()
+    setShowSongs(false)
+    setMarking(true)
+    setChrome(true)
+  }
+  function stopMarking() {
+    setMarking(false)
+    setChrome(true)
+    void saver?.flush()
+  }
+
+  function changeMarks(songId: string, page: number, next: Mark[]) {
+    const key = markKey(songId, page)
+    const stack = history.current.get(key) ?? []
+    stack.push(marks[key] ?? [])
+    history.current.set(key, stack.slice(-50))
+    setMarks((m) => ({ ...m, [key]: next }))
+    saver?.queue(songId, page, next)
+  }
+
+  function undo() {
+    const sl = slides?.[currentRef.current]
+    if (!sl) return
+    const songId = songs[sl.songIndex].id
+    const key = markKey(songId, sl.pageNo)
+    const prev = history.current.get(key)?.pop()
+    if (!prev) return
+    setMarks((m) => ({ ...m, [key]: prev }))
+    saver?.queue(songId, sl.pageNo, prev)
+  }
+
+  function clearPage() {
+    const sl = slides?.[currentRef.current]
+    if (!sl) return
+    const songId = songs[sl.songIndex].id
+    if (!(marks[markKey(songId, sl.pageNo)] ?? []).length) return
+    if (window.confirm('Clear all marks on this page?')) changeMarks(songId, sl.pageNo, [])
+  }
+
+  function close() {
+    void saver?.flush()
+    onClose()
   }
 
   const slide = slides?.[current]
@@ -360,7 +444,12 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
       {!slides ? (
         <div className="viewer-loading">Loading charts…</div>
       ) : (
-        <div ref={trackRef} className={`viewer-track ${zoom > 1 ? 'zoomed' : ''}`} onScroll={onScroll} onClick={onTap}>
+        <div
+          ref={trackRef}
+          className={`viewer-track ${zoom > 1 || marking ? 'zoomed' : ''}`}
+          onScroll={onScroll}
+          onClick={onTap}
+        >
           {slides.map((s, i) => (
             <div className={`viewer-slide ${i === current && zoom > 1 ? 'zoomed' : ''}`} key={`${s.songIndex}-${s.pageNo}`}>
               {s.doc ? (
@@ -372,6 +461,28 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
                   fit={fit}
                   zoom={i === current ? zoom : 1}
                   active={Math.abs(i - current) <= 2}
+                  overlay={({ aspect, w }) => {
+                    const songId = songs[s.songIndex].id
+                    const pageMarks = marks[markKey(songId, s.pageNo)] ?? []
+                    const editing = marking && i === current
+                    if (!pageMarks.length && !editing) return null
+                    return (
+                      <MarkLayer
+                        marks={pageMarks}
+                        aspect={aspect}
+                        pageWidth={w}
+                        edit={
+                          editing
+                            ? {
+                                tool,
+                                color: tool === 'hl' ? hlColor : penColor,
+                                onChange: (next) => changeMarks(songId, s.pageNo, next),
+                              }
+                            : undefined
+                        }
+                      />
+                    )
+                  }}
                 />
               ) : (
                 <div className="viewer-missing">
@@ -394,36 +505,78 @@ export default function Viewer({ songs, startSong = 0, onClose }: Props) {
           {current + 1}/{slides.length}
         </div>
       )}
-      {nextSong && !chrome && <div className="viewer-next">Next: {nextSong.title}</div>}
+      {nextSong && !chrome && !marking && <div className="viewer-next">Next: {nextSong.title}</div>}
 
-      <div className={`viewer-bar top ${chrome ? '' : 'hidden'}`}>
-        <button className="icon-btn" onClick={onClose} aria-label="Close charts">✕</button>
+      <div className={`viewer-bar top ${chrome || marking ? '' : 'hidden'}`}>
+        <button className="icon-btn" onClick={close} aria-label="Close charts">✕</button>
         <div className="viewer-title">
           <strong>{song?.title ?? ''}</strong>
           {slide && (
             <span>
               {song?.song_key ? `Key ${song.song_key} · ` : ''}
               Song {slide.songIndex + 1}/{songs.length} · Page {slide.pageNo}/{slide.pagesInSong}
+              {marking && saveStatus !== 'idle' && (
+                <em className={`save-status ${saveStatus}`}>
+                  {' · '}
+                  {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Not saved yet — will retry'}
+                </em>
+              )}
             </span>
           )}
         </div>
         <span className="viewer-count">{slides ? `${current + 1}/${slides.length}` : ''}</span>
       </div>
 
-      <div className={`viewer-bar bottom ${chrome ? '' : 'hidden'}`}>
-        <button className="icon-btn" onClick={() => goTo(current - 1)} aria-label="Previous page">‹</button>
-        <button className="chip" onClick={() => setShowSongs(!showSongs)}>Songs</button>
-        <button className="chip" onClick={toggleFit} aria-label={fit === 'page' ? 'Fit to width' : 'Fit whole page'}>
-          {fit === 'page' ? '↔ Width' : '▣ Page'}
-        </button>
-        <button className="chip" onClick={toggleNight}>{night ? 'Day' : 'Night'}</button>
-        {document.fullscreenEnabled && (
-          <button className="chip" onClick={toggleFullscreen} aria-label="Full screen">⛶</button>
-        )}
-        <button className="icon-btn" onClick={() => goTo(current + 1)} aria-label="Next page">›</button>
-      </div>
+      {marking ? (
+        <div className="viewer-bar bottom markup">
+          <div className="markup-row">
+            <button className="icon-btn" onClick={() => goTo(current - 1)} aria-label="Previous page">‹</button>
+            {(
+              [
+                ['pen', 'Pen'],
+                ['hl', 'Marker'],
+                ['text', 'Text'],
+                ['erase', 'Erase'],
+              ] as [MarkTool, string][]
+            ).map(([t, label]) => (
+              <button key={t} className={`chip ${tool === t ? 'on' : ''}`} onClick={() => setTool(t)}>
+                {label}
+              </button>
+            ))}
+            <button className="icon-btn" onClick={() => goTo(current + 1)} aria-label="Next page">›</button>
+          </div>
+          <div className="markup-row">
+            {tool !== 'erase' &&
+              (tool === 'hl' ? HL_COLORS : PEN_COLORS).map((c) => (
+                <button
+                  key={c}
+                  className={`swatch ${(tool === 'hl' ? hlColor : penColor) === c ? 'on' : ''}`}
+                  style={{ background: c }}
+                  aria-label={`Colour ${c}`}
+                  onClick={() => (tool === 'hl' ? setHlColor(c) : setPenColor(c))}
+                />
+              ))}
+            <button className="chip" onClick={undo}>↶ Undo</button>
+            <button className="chip" onClick={clearPage}>Clear</button>
+            <button className="chip done" onClick={stopMarking}>Done</button>
+          </div>
+        </div>
+      ) : (
+        <div className={`viewer-bar bottom ${chrome ? '' : 'hidden'}`}>
+          <button className="icon-btn" onClick={() => goTo(current - 1)} aria-label="Previous page">‹</button>
+          <button className="chip" onClick={() => setShowSongs(!showSongs)}>Songs</button>
+          <button className="chip" onClick={toggleFit} aria-label={fit === 'page' ? 'Fit to width' : 'Fit whole page'}>
+            {fit === 'page' ? '↔ Width' : '▣ Page'}
+          </button>
+          <button className="chip" onClick={toggleNight}>{night ? 'Day' : 'Night'}</button>
+          {markup && (
+            <button className="chip" onClick={startMarking}>✎ Mark up</button>
+          )}
+          <button className="icon-btn" onClick={() => goTo(current + 1)} aria-label="Next page">›</button>
+        </div>
+      )}
 
-      {showSongs && chrome && (
+      {showSongs && chrome && !marking && (
         <div className="viewer-songs">
           {songs.map((s, i) => (
             <button
@@ -453,9 +606,11 @@ interface PageProps {
   fit: Fit
   zoom: number
   active: boolean
+  /** Drawn over the page, sized with it (used for the set's markings). */
+  overlay?: (page: { w: number; h: number; aspect: number }) => ReactNode
 }
 
-function PageCanvas({ doc, pageNo, width, height, fit, zoom, active }: PageProps) {
+function PageCanvas({ doc, pageNo, width, height, fit, zoom, active, overlay }: PageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [base, setBase] = useState<{ w: number; h: number } | null>(null)
   // While pinching, only the CSS size follows the fingers; the sharp re-render waits until they settle.
@@ -521,11 +676,11 @@ function PageCanvas({ doc, pageNo, width, height, fit, zoom, active }: PageProps
     }
   }, [doc, pageNo, base, fitScale, renderZoom, active])
 
+  const css = base && fitScale ? { w: Math.floor(base.w * fitScale * zoom), h: Math.floor(base.h * fitScale * zoom) } : null
   return (
-    <canvas
-      ref={canvasRef}
-      className="viewer-page"
-      style={base && fitScale ? { width: Math.floor(base.w * fitScale * zoom), height: Math.floor(base.h * fitScale * zoom) } : undefined}
-    />
+    <div className="viewer-pagebox" style={css ? { width: css.w, height: css.h } : undefined}>
+      <canvas ref={canvasRef} className="viewer-page" />
+      {css && base && overlay?.({ w: css.w, h: css.h, aspect: base.h / base.w })}
+    </div>
   )
 }

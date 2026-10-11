@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import EventDetails from '../components/EventDetails'
 import { supabase } from '../lib/supabase'
 import { cachedSet, rememberSet } from '../lib/recent'
+import { marksFromRows, marksToRows, type MarksByPage } from '../lib/marks'
 import type { SharedEvent as SharedEventData } from '../lib/types'
 
 // pdf.js is large; load it only when someone opens the charts.
@@ -15,9 +16,19 @@ export default function SharedEvent() {
   const [event, setEvent] = useState<SharedEventData | null>(() => cachedSet(shareId))
   const [status, setStatus] = useState<'loading' | 'ok' | 'offline' | 'missing'>('loading')
   const [viewerAt, setViewerAt] = useState<number | null>(null)
+  const [marks, setMarks] = useState<MarksByPage>(() => marksFromRows(cachedSet(shareId)?.annotations))
   const [canEdit, setCanEdit] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadNote, setDownloadNote] = useState<string | null>(null)
+
+  // Keep the offline copy in step with markings made in the viewer.
+  const onMarksChange = useCallback(
+    (next: MarksByPage) => {
+      setMarks(next)
+      if (event) rememberSet({ ...event, annotations: marksToRows(next) })
+    },
+    [event],
+  )
 
   async function downloadCharts() {
     if (!event) return
@@ -25,8 +36,11 @@ export default function SharedEvent() {
     setDownloading('Preparing PDF…')
     try {
       const { mergeCharts, saveBlob, pdfFileName } = await import('../lib/mergePdf')
-      const { blob, skipped } = await mergeCharts(event.name, event.songs, (done, total) =>
-        setDownloading(`Preparing PDF… ${done}/${total}`),
+      const { blob, skipped } = await mergeCharts(
+        event.name,
+        event.songs,
+        (done, total) => setDownloading(`Preparing PDF… ${done}/${total}`),
+        marks,
       )
       saveBlob(blob, pdfFileName(event.name, event.event_date))
       if (skipped.length) setDownloadNote(`Not included (no chart or couldn’t load): ${skipped.join(', ')}`)
@@ -59,6 +73,7 @@ export default function SharedEvent() {
       } else {
         const ev = data as SharedEventData
         setEvent(ev)
+        setMarks(marksFromRows(ev.annotations))
         rememberSet(ev)
         setStatus('ok')
       }
@@ -111,7 +126,13 @@ export default function SharedEvent() {
       />
       {viewerAt !== null && (
         <Suspense fallback={<div className="viewer"><div className="viewer-loading">Loading charts…</div></div>}>
-          <Viewer songs={event.songs} startSong={viewerAt} onClose={() => setViewerAt(null)} />
+          <Viewer
+            songs={event.songs}
+            startSong={viewerAt}
+            onClose={() => setViewerAt(null)}
+            marks={marks}
+            markup={canEdit ? { eventId: event.id, onMarksChange } : undefined}
+          />
         </Suspense>
       )}
     </div>

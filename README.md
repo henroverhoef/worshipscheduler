@@ -10,10 +10,13 @@ Plan worship sets, share them with your team, and play the chord charts like a m
   under "Leaders for this set". The song library and the Leaders list are shared by all leaders.
 - **Sharing**: every set has a private link (`/s/…`). Team members need no account and only see that set.
 - **Charts viewer**: all pages of all charts in one swipeable strip (a 3-page and a 2-page chart swipe as 5 pages).
-  Tap the left/right edge to turn pages, tap the middle for controls (song list, fit width/page, night mode,
-  full screen). Pinch (or double-tap) to zoom and drag to pan around a page; on a laptop use ctrl/trackpad pinch
+  Tap the left/right edge to turn pages, tap the middle for controls (song list, fit width/page, night mode).
+  Pinch (or double-tap) to zoom and drag to pan around a page; on a laptop use ctrl/trackpad pinch
   or + / − / 0. Bluetooth page-turner pedals work (arrow / page keys). The screen stays awake while it's open.
-- **Download**: a set's page offers all its charts as one combined PDF, in set order.
+- **Chart markup**: a set's leaders tap "✎ Mark up" in the viewer to draw (pen, highlighter) and add text notes on
+  that set's charts. Marks are saved per set + song + page as a layer over the untouched library PDF, so the library
+  stays clean and other sets aren't affected. The team sees the marks; duplicating a set copies them.
+- **Download**: a set's page offers all its charts as one combined PDF, in set order, including the set's marks.
 - **SongSelect shortcut**: when adding a song, "Find on SongSelect" opens SongSelect's search for that title.
   SongSelect has no public API for importing charts, so the PDF is still downloaded there.
 - **Share to the app (Android)**: with the app installed, share one or more PDFs (e.g. a chart just downloaded from

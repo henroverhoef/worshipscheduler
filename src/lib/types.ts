@@ -1,3 +1,5 @@
+import type { Mark } from './marks'
+
 export interface Song {
   id: string
   title: string
@@ -67,4 +69,6 @@ export interface SharedEvent {
   updated_at: string
   team: TeamMember[]
   songs: SetSong[]
+  /** Markings the set's leaders drew on the charts (per song + page). */
+  annotations?: { song_id: string; page: number; items: Mark[] }[]
 }

@@ -206,7 +206,7 @@ input[type='file'] { padding: 8px; }
 /* Viewer */
 .viewer { position: fixed; inset: 0; z-index: 100; background: #fff; color: #111; touch-action: pan-x pan-y; }
 .viewer.night { background: #000; }
-.viewer.night .viewer-page { filter: invert(1) hue-rotate(180deg); }
+.viewer.night .viewer-pagebox { filter: invert(1) hue-rotate(180deg); }
 .viewer-loading { display: grid; place-items: center; height: 100%; color: #666; }
 .viewer-track {
   display: flex; height: 100%; overflow-x: auto; overflow-y: hidden;
@@ -222,7 +222,26 @@ input[type='file'] { padding: 8px; }
 }
 .viewer-slide::-webkit-scrollbar { display: none; }
 .viewer-slide.zoomed { overscroll-behavior: contain; }
-.viewer-page { display: block; background: #fff; margin: auto; flex: none; }
+.viewer-pagebox { position: relative; margin: auto; flex: none; background: #fff; }
+.viewer-page { display: block; width: 100%; height: 100%; }
+
+/* Set markings over the chart */
+.marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.marks.editing { pointer-events: all; touch-action: none; cursor: crosshair; }
+.marks.tool-text { cursor: text; }
+.marks.tool-erase { cursor: cell; }
+.mark-pen, .mark-hl { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.mark-hl { opacity: 0.4; mix-blend-mode: multiply; }
+.mark-text {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-weight: 700;
+  paint-order: stroke; stroke: #fff; stroke-linejoin: round;
+}
+.mark-input {
+  position: absolute; z-index: 3; margin: -3px 0 0 -6px; padding: 1px 5px; min-width: 7em; width: auto;
+  field-sizing: content; resize: none; overflow: hidden; line-height: 1.2;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-weight: 700;
+  background: rgb(255 255 255 / 0.92); border: 1.5px dashed currentColor; border-radius: 6px; outline: none;
+}
 .viewer-missing { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #666; text-align: center; padding: 24px; }
 .viewer-missing strong { font-size: 1.4rem; color: #222; }
 .viewer.night .viewer-missing strong { color: #eee; }
@@ -237,6 +256,18 @@ input[type='file'] { padding: 8px; }
 .viewer-bar.top.hidden { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 .viewer-bar.bottom.hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
 .viewer-bar .icon-btn:hover { background: rgb(255 255 255 / 0.12); }
+.viewer-bar.bottom.markup { flex-direction: column; gap: 6px; }
+.markup-row { display: flex; gap: 6px; align-items: center; justify-content: center; width: 100%; }
+.markup .chip { padding: 7px 11px; }
+.chip.on { background: #fff; color: #14121a; border-color: #fff; }
+.chip.done { background: #9d86ff; color: #14121a; border-color: #9d86ff; }
+.swatch {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; cursor: pointer;
+  border: 2px solid rgb(255 255 255 / 0.35);
+}
+.swatch.on { border-color: #fff; box-shadow: inset 0 0 0 2px #14121a; }
+.save-status { font-style: normal; }
+.save-status.error { color: #ffb4a8; }
 .viewer-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .viewer-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .viewer-title span { font-size: 0.8rem; opacity: 0.75; }
