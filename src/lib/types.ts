@@ -27,6 +27,8 @@ export interface EventRow {
   prayer_points: string | null
   notes: string | null
   created_by_email: string | null
+  /** Kept sets are skipped by the nightly cleanup (sets go a week after their date). */
+  keep: boolean
   created_at: string
   updated_at: string
 }

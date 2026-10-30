@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import SongForm from '../components/SongForm'
 import { useAuth } from '../auth'
+import { fetchMyPeople, fetchNames, matchesPerson, personLabel, type Person } from '../lib/people'
 import { supabase } from '../lib/supabase'
 import { fetchSongs } from '../lib/songs'
 import { shareLink, shareText, shareUrl, songSelectSearchUrl } from '../lib/format'
@@ -72,21 +73,25 @@ export default function EventEdit() {
   // Leaders who can see and edit this set, besides its creator.
   const [setLeaders, setSetLeaders] = useState<string[]>([])
   const [savedSetLeaders, setSavedSetLeaders] = useState<string[]>([])
-  const [allLeaders, setAllLeaders] = useState<string[]>([])
-  const [inviting, setInviting] = useState('')
+  // You and your co-leaders: the only people who can be added to your sets.
+  const [people, setPeople] = useState<Person[]>([])
+  const [names, setNames] = useState<Record<string, string>>({})
+  const [keep, setKeep] = useState(false)
+  const [leaderQuery, setLeaderQuery] = useState('')
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const [songs, teamHistory, leaderRows] = await Promise.all([
+      const [songs, teamHistory, myPeople] = await Promise.all([
         fetchSongs(),
         supabase.from('event_team').select('name, role').limit(1000),
-        supabase.from('leaders').select('email').order('email'),
+        fetchMyPeople().catch(() => [] as Person[]),
       ])
       if (cancelled) return
       setLibrary(songs)
-      setAllLeaders((leaderRows.data ?? []).map((l) => l.email as string))
+      setPeople(myPeople)
+      const coLeaderEmails = new Set(myPeople.filter((p) => !p.me).map((p) => p.email))
       const hist = teamHistory.data ?? []
       setPastPeople({
         names: [...new Set(hist.map((t) => t.name as string))].sort(),
@@ -113,13 +118,18 @@ export default function EventEdit() {
           }
           const invited = ev.event_leaders.map((l) => l.email)
           if (copyFrom) {
-            // The copy belongs to whoever duplicates it; keep the original's leaders on it.
-            const keep = [...invited, ev.created_by_email].filter((e): e is string => !!e && e !== me)
-            setSetLeaders([...new Set(keep)])
+            // The copy belongs to whoever duplicates it; keep the original's leaders on it
+            // (those who are your co-leaders — only they can be on your sets).
+            const carry = [...invited, ev.created_by_email].filter(
+              (e): e is string => !!e && e !== me && coLeaderEmails.has(e),
+            )
+            setSetLeaders([...new Set(carry)])
           } else {
             setSetLeaders(invited)
             setSavedSetLeaders(invited)
+            setKeep(!!ev.keep)
           }
+          fetchNames([...invited, ev.created_by_email ?? '']).then((n) => !cancelled && setNames(n))
           setFields({
             name: copyFrom ? `${ev.name} (copy)` : ev.name,
             event_date: copyFrom ? '' : ev.event_date ?? '',
@@ -186,6 +196,7 @@ export default function EventEdit() {
       scripture: fields.scripture.trim() || null,
       prayer_points: fields.prayer_points.trim() || null,
       notes: fields.notes.trim() || null,
+      keep,
     }
     try {
       let ev: EventRow
@@ -277,7 +288,9 @@ export default function EventEdit() {
   if (loading) return <p className="muted">Loading…</p>
 
   const creator = saved?.created_by_email ?? null
-  const invitable = allLeaders.filter((e) => e !== (creator ?? me) && !setLeaders.includes(e))
+  const nameOf = (email: string) => names[email] ?? people.find((p) => p.email === email)?.name ?? email
+  const addable = people.filter((p) => !p.me && p.email !== creator && !setLeaders.includes(p.email))
+  const addableShown = addable.filter((p) => matchesPerson(p, leaderQuery)).slice(0, 30)
 
   return (
     <form className="editor" onSubmit={save}>
@@ -310,6 +323,16 @@ export default function EventEdit() {
             <input value={fields.start_time} onChange={(e) => set('start_time', e.target.value)} placeholder="9:30 (soundcheck 8:00)" />
           </label>
         </div>
+        <label className="keep-toggle">
+          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
+          <span>
+            <strong>Keep this set</strong>
+            <br />
+            <span className="muted small">
+              Otherwise it’s removed automatically a week after its date. Handy for templates you duplicate.
+            </span>
+          </span>
+        </label>
         <label>
           Location
           <input value={fields.location} onChange={(e) => set('location', e.target.value)} />
@@ -387,19 +410,17 @@ export default function EventEdit() {
         </p>
         <ul className="chips">
           <li className="chip-item">
-            {creator ?? me}
-            <span className="muted small">{creator && creator !== me ? 'created it' : 'you · created it'}</span>
+            {creator && creator !== me ? nameOf(creator) : 'You'}
+            <span className="muted small">created it</span>
           </li>
           {setLeaders.map((email) => (
-            <li key={email} className="chip-item">
-              {email}
-              {email === me ? (
-                <span className="muted small">you</span>
-              ) : (
+            <li key={email} className="chip-item" title={email}>
+              {email === me ? 'You' : nameOf(email)}
+              {email !== me && (
                 <button
                   type="button"
                   className="icon-btn"
-                  aria-label={`Remove ${email} from this set`}
+                  aria-label={`Remove ${nameOf(email)} from this set`}
                   onClick={() => setSetLeaders(setLeaders.filter((x) => x !== email))}
                 >
                   ✕
@@ -408,29 +429,45 @@ export default function EventEdit() {
             </li>
           ))}
         </ul>
-        {invitable.length > 0 ? (
-          <div className="inline-form">
-            <select value={inviting} onChange={(e) => setInviting(e.target.value)} aria-label="Leader to add">
-              <option value="">Add a leader to this set…</option>
-              {invitable.map((email) => (
-                <option key={email} value={email}>{email}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn"
-              disabled={!inviting}
-              onClick={() => {
-                setSetLeaders([...setLeaders, inviting])
-                setInviting('')
-              }}
-            >
-              Add
-            </button>
-          </div>
+        {addable.length > 0 ? (
+          <>
+            <input
+              type="search"
+              placeholder="Add a co-leader — search by name or email"
+              aria-label="Find a co-leader to add"
+              value={leaderQuery}
+              onChange={(e) => setLeaderQuery(e.target.value)}
+            />
+            {(leaderQuery.trim() || addable.length <= 8) && (
+              <ul className="person-pick">
+                {addableShown.map((p) => (
+                  <li key={p.email}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSetLeaders([...setLeaders, p.email])
+                        setLeaderQuery('')
+                      }}
+                    >
+                      <span>
+                        <strong>{personLabel(p)}</strong>
+                        {p.name && <span className="muted small">{p.email}</span>}
+                      </span>
+                      <span className="add">+ Add</span>
+                    </button>
+                  </li>
+                ))}
+                {addableShown.length === 0 && <li className="muted small" style={{ padding: '9px 12px' }}>No matches.</li>}
+              </ul>
+            )}
+          </>
         ) : (
           <p className="muted small">
-            {allLeaders.length <= 1 ? 'Add more leaders on the Leaders page first.' : 'All leaders are on this set.'}
+            {people.filter((p) => !p.me).length === 0 ? (
+              <>Invite co-leaders on the <Link to="/co-leaders">Co-leaders</Link> page first.</>
+            ) : (
+              'All your co-leaders are on this set.'
+            )}
           </p>
         )}
       </section>

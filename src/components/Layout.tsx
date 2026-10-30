@@ -3,7 +3,7 @@ import { useAuth } from '../auth'
 import { supabase } from '../lib/supabase'
 
 export default function Layout() {
-  const { isLeader, session } = useAuth()
+  const { isLeader, isAdmin, session } = useAuth()
   const navigate = useNavigate()
 
   async function signOut() {
@@ -22,7 +22,8 @@ export default function Layout() {
           <nav className="tabs">
             <NavLink to="/" end>Sets</NavLink>
             <NavLink to="/library">Library</NavLink>
-            <NavLink to="/leaders">Leaders</NavLink>
+            <NavLink to="/co-leaders">Co-leaders</NavLink>
+            {isAdmin && <NavLink to="/overview">Overview</NavLink>}
           </nav>
         )}
         <div className="topbar-end">

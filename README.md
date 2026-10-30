@@ -6,8 +6,16 @@ Plan worship sets, share them with your team, and play the chord charts like a m
   title and key from the file name (`Way Maker - E.pdf`, `Goodness of God (Ab).pdf`).
 - **Sets**: name, date, time, location, heart for the set, scripture, prayer points, team (who's on what) and
   the song order, with a per-set key and notes for each song. Duplicate a set to reuse it.
-- **Private sets**: a set is only visible (and editable) to the leader who created it and the leaders they add
-  under "Leaders for this set". The song library and the Leaders list are shared by all leaders.
+- **Private sets**: a set is only visible (and editable) to the leader who created it and the co-leaders they add
+  under "Leaders for this set". The song library is shared by all leaders.
+- **Co-leaders and invites**: leaders only see their own co-leaders (mutual pairs), not everyone on the app. On the
+  Co-leaders page you invite someone by email and get a link to share (share sheet, copy, or your email app). When they
+  open it and sign in with that email (creating an account if needed, which confirms the address), they become a
+  leader and your co-leader. Everyone has a name co-leaders can search by; accounts without one are prompted.
+- **Cleanup**: a nightly job (pg_cron) deletes sets a week after their date (or creation, if undated), with their
+  songs list, team and markings. Tick "Keep this set" to exempt one, e.g. a template.
+- **App overview** (app admins only): totals, every leader with their co-leaders, sets, uploads and last sign-in,
+  open invites, and removing a leader.
 - **Sharing**: every set has a private link (`/s/…`). Team members need no account and only see that set.
 - **Charts viewer**: all pages of all charts in one swipeable strip (a 3-page and a 2-page chart swipe as 5 pages).
   Tap the left/right edge to turn pages, tap the middle for controls (song list, fit width/page, night mode).

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { supabase } from '../lib/supabase'
 
@@ -7,21 +7,24 @@ type Mode = 'signin' | 'signup' | 'link'
 
 export default function Login() {
   const { session } = useAuth()
-  const [mode, setMode] = useState<Mode>('signin')
-  const [email, setEmail] = useState('')
+  const [params] = useSearchParams()
+  // Invite links send people here with their email filled in and a page to return to.
+  const next = params.get('next')?.startsWith('/') ? params.get('next')! : '/'
+  const [mode, setMode] = useState<Mode>(params.get('mode') === 'signup' ? 'signup' : 'signin')
+  const [email, setEmail] = useState(params.get('email') ?? '')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  if (session) return <Navigate to="/" replace />
+  if (session) return <Navigate to={next} replace />
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     setMessage(null)
-    const redirect = window.location.origin
+    const redirect = window.location.origin + (next === '/' ? '' : next)
     const clean = email.trim().toLowerCase()
     let err: { message: string } | null = null
     if (mode === 'signin') {
@@ -45,7 +48,8 @@ export default function Login() {
     <div className="narrow">
       <h1>Leader sign in</h1>
       <p className="muted">
-        Team members don’t need an account — they just open the link you share with them.
+        Team members don’t need an account — they just open the link you share with them. To become a leader, ask a
+        worship leader to invite you.
       </p>
       <div className="segmented">
         <button className={mode === 'signin' ? 'on' : ''} onClick={() => setMode('signin')}>Sign in</button>
@@ -78,7 +82,7 @@ export default function Login() {
       </form>
       {mode === 'signup' && (
         <p className="muted small">
-          Only email addresses on the Leaders list can edit songs and sets. Ask an existing leader to add you.
+          After creating your account, confirm it from the email you receive, then come back and sign in.
         </p>
       )}
     </div>

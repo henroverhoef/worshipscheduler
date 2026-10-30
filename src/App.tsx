@@ -5,9 +5,18 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import Library from './pages/Library'
 import EventEdit from './pages/EventEdit'
-import Leaders from './pages/Leaders'
+import CoLeaders from './pages/CoLeaders'
+import Invite from './pages/Invite'
+import Admin from './pages/Admin'
 import SharedEvent from './pages/SharedEvent'
 import type { ReactNode } from 'react'
+
+function AdminOnly({ children }: { children: ReactNode }) {
+  const { loading, isAdmin } = useAuth()
+  if (loading) return <div className="center muted">Loading…</div>
+  if (!isAdmin) return <Navigate to="/" replace />
+  return <>{children}</>
+}
 
 function LeaderOnly({ children }: { children: ReactNode }) {
   const { loading, session, isLeader } = useAuth()
@@ -32,7 +41,10 @@ export default function App() {
         <Route path="/library" element={<LeaderOnly><Library /></LeaderOnly>} />
         <Route path="/sets/new" element={<EditorRoute />} />
         <Route path="/sets/:id" element={<EditorRoute />} />
-        <Route path="/leaders" element={<LeaderOnly><Leaders /></LeaderOnly>} />
+        <Route path="/co-leaders" element={<LeaderOnly><CoLeaders /></LeaderOnly>} />
+        <Route path="/leaders" element={<Navigate to="/co-leaders" replace />} />
+        <Route path="/invite/:token" element={<Invite />} />
+        <Route path="/overview" element={<AdminOnly><Admin /></AdminOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
