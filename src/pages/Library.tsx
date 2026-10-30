@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import SongForm from '../components/SongForm'
-import { createSong, fetchSongs } from '../lib/songs'
-import { parseChartFileName } from '../lib/format'
+import ImportReview from '../components/ImportReview'
+import { fetchSongs } from '../lib/songs'
 import { takeSharedFiles } from '../lib/sharedFiles'
 import type { Song } from '../lib/types'
 
@@ -23,12 +23,12 @@ export default function Library() {
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState<Song | 'new' | null>(null)
   const [preview, setPreview] = useState<Song | null>(null)
-  const [importing, setImporting] = useState<{ done: number; total: number; failed: string[] } | null>(null)
+  // Chart PDFs waiting to be checked in the review sheet before they're uploaded.
+  const [reviewing, setReviewing] = useState<File[] | null>(null)
   const bulkInput = useRef<HTMLInputElement>(null)
   const [params, setParams] = useSearchParams()
   // PDFs shared to the app from the phone's Share menu.
   const [sharedFile, setSharedFile] = useState<File | null>(null)
-  const [sharedBatch, setSharedBatch] = useState<File[] | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function Library() {
       else if (files.length === 1) {
         setSharedFile(files[0])
         setEditing('new')
-      } else setSharedBatch(files)
+      } else setReviewing(files)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -63,30 +63,8 @@ export default function Library() {
     setEditing(null)
   }
 
-  async function bulkImport(all: File[]) {
-    if (!all.length) return
-    const state = { done: 0, total: all.length, failed: [] as string[] }
-    setImporting({ ...state })
-    // A few uploads at a time keeps mobile connections happy.
-    const queue = [...all]
-    async function worker() {
-      for (let f = queue.shift(); f; f = queue.shift()) {
-        const guess = parseChartFileName(f.name)
-        try {
-          const song = await createSong(
-            { title: guess.title, song_key: guess.key, artist: null, tempo: null, time_sig: null, tags: [], notes: null },
-            f,
-          )
-          setSongs((list) => [...(list ?? []), song].sort((a, b) => a.title.localeCompare(b.title)))
-        } catch {
-          state.failed.push(f.name)
-        }
-        state.done++
-        setImporting({ ...state, failed: [...state.failed] })
-      }
-    }
-    await Promise.all([worker(), worker(), worker()])
-    if (bulkInput.current) bulkInput.current.value = ''
+  function upsertQuietly(song: Song) {
+    setSongs((list) => [...(list ?? []).filter((s) => s.id !== song.id), song].sort((a, b) => a.title.localeCompare(b.title)))
   }
 
   return (
@@ -103,7 +81,11 @@ export default function Library() {
           accept="application/pdf,.pdf"
           multiple
           hidden
-          onChange={(e) => bulkImport(Array.from(e.target.files ?? []))}
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? [])
+            if (files.length) setReviewing(files)
+            e.target.value = ''
+          }}
         />
       </div>
 
@@ -113,37 +95,6 @@ export default function Library() {
           <button className="btn ghost small" onClick={() => setShareError(null)}>Dismiss</button>
         </div>
       )}
-      {sharedBatch && (
-        <div className="card notice-card">
-          <strong>{sharedBatch.length} charts shared to the app:</strong>{' '}
-          {sharedBatch.map((f) => f.name).join(', ')}
-          <div className="actions" style={{ marginTop: 10 }}>
-            <button
-              className="btn primary small"
-              onClick={() => {
-                bulkImport(sharedBatch)
-                setSharedBatch(null)
-              }}
-            >
-              Add all to library
-            </button>
-            <button className="btn ghost small" onClick={() => setSharedBatch(null)}>Cancel</button>
-          </div>
-        </div>
-      )}
-      {importing && (
-        <div className="card notice-card">
-          {importing.done < importing.total
-            ? `Importing ${importing.done + 1} of ${importing.total}…`
-            : `Imported ${importing.total - importing.failed.length} of ${importing.total} charts.`}
-          {importing.failed.length > 0 && <div className="error small">Failed: {importing.failed.join(', ')}</div>}
-          {importing.done === importing.total && (
-            <button className="btn ghost small" onClick={() => setImporting(null)}>Dismiss</button>
-          )}
-          <p className="muted small">Titles and keys are guessed from file names (e.g. “Way Maker - E.pdf”). Tap a song to fix details.</p>
-        </div>
-      )}
-
       <input
         className="search"
         type="search"
@@ -177,11 +128,22 @@ export default function Library() {
         </ul>
       )}
 
+      {reviewing && (
+        <ImportReview files={reviewing} library={songs ?? []} onSaved={upsertQuietly} onClose={() => setReviewing(null)} />
+      )}
       {editing && (
         <SongForm
+          key={editing === 'new' ? 'new' : editing.id}
           song={editing === 'new' ? null : editing}
-          initialFile={editing === 'new' ? sharedFile ?? undefined : undefined}
+          initialFile={sharedFile ?? undefined}
           library={songs ?? []}
+          existingAction={{
+            label: sharedFile ? 'Replace its chart with this PDF' : 'Open that song instead',
+            run: (existing, file) => {
+              setSharedFile(file)
+              setEditing(existing)
+            },
+          }}
           onSaved={(song) => {
             setSharedFile(null)
             upsertLocal(song)

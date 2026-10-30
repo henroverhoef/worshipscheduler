@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { createSong, deleteSong, songUsage, updateSong, type SongInput } from '../lib/songs'
+import { createSong, deleteSong, findDuplicates, songLabel, songUsage, updateSong, type SongInput } from '../lib/songs'
 import { parseChartFileName, songSelectSearchUrl } from '../lib/format'
 import type { Song } from '../lib/types'
 
@@ -9,14 +9,16 @@ interface Props {
   initialTitle?: string
   /** Pre-attached chart for a new song (e.g. a PDF shared to the app). */
   initialFile?: File
-  /** Used to warn when a new song's title is already in the library. */
+  /** Used to stop a song being added (or renamed) twice. */
   library?: Song[]
+  /** What to offer when the song already exists, e.g. open it instead, or add it to the set. */
+  existingAction?: { label: string; run: (existing: Song, file: File | null) => void }
   onSaved: (song: Song) => void
   onDeleted: (id: string) => void
   onClose: () => void
 }
 
-export default function SongForm({ song, initialTitle, initialFile, library, onSaved, onDeleted, onClose }: Props) {
+export default function SongForm({ song, initialTitle, initialFile, library, existingAction, onSaved, onDeleted, onClose }: Props) {
   const guess = initialFile ? parseChartFileName(initialFile.name) : null
   const [title, setTitle] = useState(song?.title ?? initialTitle ?? guess?.title ?? '')
   const [artist, setArtist] = useState(song?.artist ?? '')
@@ -38,12 +40,20 @@ export default function SongForm({ song, initialTitle, initialFile, library, onS
     }
   }
 
-  const duplicate = !song && title.trim()
-    ? library?.find((s) => s.title.trim().toLowerCase() === title.trim().toLowerCase())
-    : undefined
+  const duplicates = library ? findDuplicates(title, artist.trim() || null, library, song?.id) : []
+  // If an artist would tell them apart, say so; otherwise it's simply already there.
+  const canDisambiguate = duplicates.some((d) => !d.artist) || !artist.trim()
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (duplicates.length) {
+      setError(
+        canDisambiguate
+          ? 'This might already be in the library. If it’s a different song, add the artist (or change the title).'
+          : 'This song is already in the library. Change the title or artist.',
+      )
+      return
+    }
     setBusy(true)
     setError(null)
     const input: SongInput = {
@@ -110,7 +120,7 @@ export default function SongForm({ song, initialTitle, initialFile, library, onS
           Chart PDF {song?.pdf_name && !file && <span className="muted small">— current: {song.pdf_name}</span>}
           {file && initialFile === file ? (
             <span className="shared-file">
-              📄 {file.name}
+              📄 {song ? 'New chart: ' : ''}{file.name}
               <button type="button" className="btn ghost small" onClick={() => setFile(null)}>Change</button>
             </span>
           ) : (
@@ -121,16 +131,34 @@ export default function SongForm({ song, initialTitle, initialFile, library, onS
           Title
           <input required value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
-        {duplicate && (
-          <p className="warn small">
-            “{duplicate.title}”{duplicate.song_key ? ` (${duplicate.song_key})` : ''} is already in the library. Saving
-            adds a second copy — to replace its chart instead, open that song from the Library.
-          </p>
+        {duplicates.length > 0 && (
+          <div className="dup-note">
+            <p className="small" style={{ margin: 0 }}>
+              ⚠ {duplicates.length === 1 ? 'Already in the library' : 'The library already has'}:{' '}
+              {duplicates.map(songLabel).join(', ')}.{' '}
+              {canDisambiguate ? 'If this is a different song, add the artist to tell them apart.' : 'Change the title or artist.'}
+            </p>
+            {existingAction && (
+              <div className="actions">
+                {duplicates.map((d) => (
+                  <button key={d.id} type="button" className="btn small" onClick={() => existingAction.run(d, file)}>
+                    {existingAction.label}
+                    {duplicates.length > 1 ? `: ${songLabel(d)}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         <label>
           Artist
-          <input value={artist} onChange={(e) => setArtist(e.target.value)} />
+          <input list="song-artists" value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="e.g. Bethel Music" />
         </label>
+        <datalist id="song-artists">
+          {[...new Set((library ?? []).map((s) => s.artist).filter((a): a is string => !!a))].sort().map((a) => (
+            <option key={a} value={a} />
+          ))}
+        </datalist>
         <div className="grid3">
           <label>
             Key

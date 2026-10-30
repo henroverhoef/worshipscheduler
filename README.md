@@ -2,8 +2,13 @@
 
 Plan worship sets, share them with your team, and play the chord charts like a music stand.
 
-- **Library**: add, edit and delete songs with their chart PDFs. "Import PDFs" uploads many charts at once and guesses
-  title and key from the file name (`Way Maker - E.pdf`, `Goodness of God (Ab).pdf`).
+- **Library**: add, edit and delete songs with their chart PDFs. "Import PDFs" (or sharing several PDFs to the app)
+  opens a review sheet first: each chart gets title, artist, key, BPM, time and tags to check or fill in before anything
+  is uploaded. Title and key are guessed from the file name (`Way Maker - E.pdf`, `Goodness of God (Ab).pdf`), and key,
+  tempo and time from the chart's own text where it prints them.
+- **No duplicate songs**: a song counts as already in the library when the title matches (ignoring case and
+  punctuation) and the artist matches or is missing. Such files are flagged until you change the title/artist, replace
+  the existing song's chart, or skip them. The database also refuses two songs with the same title and artist.
 - **Sets**: name, date, time, location, heart for the set, scripture, prayer points, team (who's on what) and
   the song order, with a per-set key and notes for each song. Duplicate a set to reuse it.
 - **Private sets**: a set is only visible (and editable) to the leader who created it and the co-leaders they add

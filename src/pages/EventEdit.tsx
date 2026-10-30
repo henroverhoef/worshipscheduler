@@ -556,6 +556,13 @@ function SongPicker({ library, chosen, onAdd, onCreated, onClose }: PickerProps)
         song={null}
         initialTitle={query.trim()}
         library={library}
+        existingAction={{
+          label: 'Add this one to the set',
+          run: (existing) => {
+            onAdd(existing)
+            setCreating(false)
+          },
+        }}
         onSaved={(song) => {
           onCreated(song)
           onAdd(song)
