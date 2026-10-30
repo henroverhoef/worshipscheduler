@@ -54,6 +54,7 @@ export async function GET(request: Request) {
     const image = new URL('/icons/icon-512.png', url).toString()
     const tags = [
       `<meta property="og:title" content="${escapeHtml(title)}" />`,
+      `<meta property="og:site_name" content="Proskuneo" />`,
       `<meta property="og:description" content="${escapeHtml(description)}" />`,
       `<meta property="og:type" content="website" />`,
       `<meta property="og:url" content="${escapeHtml(`${url.origin}/s/${shareId}`)}" />`,

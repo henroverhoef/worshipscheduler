@@ -84,9 +84,9 @@ export default function SharedEvent() {
   }, [shareId])
 
   useEffect(() => {
-    if (event) document.title = `${event.name} · Worship Sets`
+    if (event) document.title = `${event.name} · Proskuneo`
     return () => {
-      document.title = 'Worship Sets'
+      document.title = 'Proskuneo'
     }
   }, [event])
 

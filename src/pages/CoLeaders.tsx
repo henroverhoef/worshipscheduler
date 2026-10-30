@@ -184,7 +184,7 @@ function InviteShare({ invite, fromName, highlight }: { invite: SentInvite; from
   const [copied, setCopied] = useState(false)
   const url = inviteUrl(invite.token)
   const message = inviteMessage(fromName, invite.token)
-  const subject = `${fromName || 'A worship leader'} invited you to Worship Sets`
+  const subject = `${fromName || 'A worship leader'} invited you to Proskuneo`
 
   async function share() {
     try {

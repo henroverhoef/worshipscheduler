@@ -64,7 +64,7 @@ export function inviteUrl(token: string) {
 }
 
 export function inviteMessage(fromName: string | null, token: string) {
-  return `${fromName || 'A worship leader'} invited you to lead worship sets together on Worship Sets. Open this link and sign in (or create an account) with this email address to accept:\n\n${inviteUrl(token)}`
+  return `${fromName || 'A worship leader'} invited you to lead worship sets together on Proskuneo. Open this link and sign in (or create an account) with this email address to accept:\n\n${inviteUrl(token)}`
 }
 
 export async function createInvite(email: string): Promise<string> {

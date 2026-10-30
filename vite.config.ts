@@ -10,8 +10,8 @@ export default defineConfig({
       includeAssets: ['icons/*.png', 'icons/*.svg'],
       manifest: {
         id: '/',
-        name: 'Worship Sets',
-        short_name: 'Sets',
+        name: 'Proskuneo',
+        short_name: 'Proskuneo',
         description: 'Plan worship sets, share them with your team and play the charts like a music stand.',
         start_url: '/',
         scope: '/',

@@ -16,7 +16,7 @@ export default function Layout() {
       <header className="topbar">
         <NavLink to="/" className="brand">
           <img src="/icons/icon.svg" alt="" width={28} height={28} />
-          <span>Worship Sets</span>
+          <span>Proskuneo</span>
         </NavLink>
         {isLeader && (
           <nav className="tabs">
