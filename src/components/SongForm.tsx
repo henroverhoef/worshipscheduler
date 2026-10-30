@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { createSong, deleteSong, findDuplicates, songLabel, songUsage, updateSong, type SongInput } from '../lib/songs'
 import { parseChartFileName, songSelectSearchUrl } from '../lib/format'
 import type { Song } from '../lib/types'
@@ -33,12 +33,26 @@ export default function SongForm({ song, initialTitle, initialFile, library, exi
 
   function pickFile(f: File | null) {
     setFile(f)
-    if (f && !title) {
-      const guess = parseChartFileName(f.name)
-      setTitle(guess.title)
-      if (guess.key && !key) setKey(guess.key)
-    }
+    if (!f) return
+    const guess = parseChartFileName(f.name)
+    if (!title) setTitle(guess.title)
+    if (guess.key && !key) setKey(guess.key)
+    // Fill key / tempo / time from the chart itself where it prints them.
+    import('../lib/pdfDetails')
+      .then(({ readChartDetails }) => readChartDetails(f))
+      .then((d) => {
+        if (d.key) setKey((k) => k || d.key!)
+        if (d.tempo) setTempo((t) => t || String(d.tempo))
+        if (d.timeSig) setTimeSig((t) => t || d.timeSig!)
+      })
+      .catch(() => {})
   }
+
+  // Shared PDFs arrive pre-attached: read their details too.
+  useEffect(() => {
+    if (initialFile && !song) pickFile(initialFile)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const duplicates = library ? findDuplicates(title, artist.trim() || null, library, song?.id) : []
   // If an artist would tell them apart, say so; otherwise it's simply already there.
@@ -46,6 +60,10 @@ export default function SongForm({ song, initialTitle, initialFile, library, exi
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (!artist.trim()) {
+      setError('Add the artist — every song needs one.')
+      return
+    }
     if (duplicates.length) {
       setError(
         canDisambiguate
@@ -66,7 +84,15 @@ export default function SongForm({ song, initialTitle, initialFile, library, exi
       notes: notes.trim() || null,
     }
     try {
-      onSaved(song ? await updateSong(song, input, file) : await createSong(input, file))
+      // Read the chart's words now so it's searchable straight away (the background reader catches failures).
+      let lyrics: string | null | undefined
+      if (file) {
+        lyrics = await import('../lib/pdfDetails')
+          .then(({ readChartDetails }) => readChartDetails(file))
+          .then((d) => d.lyrics)
+          .catch(() => undefined)
+      }
+      onSaved(song ? await updateSong(song, input, file, lyrics) : await createSong(input, file, lyrics))
     } catch (err) {
       setError((err as Error).message)
       setBusy(false)
@@ -152,7 +178,13 @@ export default function SongForm({ song, initialTitle, initialFile, library, exi
         )}
         <label>
           Artist
-          <input list="song-artists" value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="e.g. Bethel Music" />
+          <input
+            list="song-artists"
+            required
+            value={artist}
+            onChange={(e) => setArtist(e.target.value)}
+            placeholder="e.g. Bethel Music"
+          />
         </label>
         <datalist id="song-artists">
           {[...new Set((library ?? []).map((s) => s.artist).filter((a): a is string => !!a))].sort().map((a) => (

@@ -1,8 +1,11 @@
 import { supabase, CHARTS_BUCKET } from './supabase'
 import type { Song } from './types'
 
+// Everything except the (large) searchable lyrics text.
+const SONG_COLUMNS = 'id, title, artist, song_key, tempo, time_sig, tags, notes, pdf_path, pdf_name, created_at, updated_at'
+
 export async function fetchSongs(): Promise<Song[]> {
-  const { data, error } = await supabase.from('songs').select('*').order('title')
+  const { data, error } = await supabase.from('songs').select(SONG_COLUMNS).order('title')
   if (error) throw error
   return data as Song[]
 }
@@ -58,12 +61,17 @@ function friendly(error: { code?: string; message: string }, input: SongInput): 
   return new Error(error.message)
 }
 
-export async function createSong(input: SongInput, file: File | null): Promise<Song> {
+/**
+ * `lyrics`: the chart's words, if already read from the file (undefined = not read; the
+ * background reader picks it up later).
+ */
+export async function createSong(input: SongInput, file: File | null, lyrics?: string | null): Promise<Song> {
   const pdf_path = file ? await uploadChart(file) : null
+  const words = file && lyrics !== undefined ? { lyrics, lyrics_indexed_at: new Date().toISOString() } : {}
   const { data, error } = await supabase
     .from('songs')
-    .insert({ ...input, pdf_path, pdf_name: file?.name ?? null })
-    .select()
+    .insert({ ...input, pdf_path, pdf_name: file?.name ?? null, ...words })
+    .select(SONG_COLUMNS)
     .single()
   if (error) {
     await removeChart(pdf_path)
@@ -72,13 +80,19 @@ export async function createSong(input: SongInput, file: File | null): Promise<S
   return data as Song
 }
 
-export async function updateSong(song: Song, input: SongInput, file: File | null): Promise<Song> {
-  const patch: Partial<Song> = { ...input, updated_at: new Date().toISOString() }
+export async function updateSong(song: Song, input: SongInput, file: File | null, lyrics?: string | null): Promise<Song> {
+  const patch: Partial<Song> & { lyrics?: string | null; lyrics_indexed_at?: string | null } = {
+    ...input,
+    updated_at: new Date().toISOString(),
+  }
   if (file) {
     patch.pdf_path = await uploadChart(file)
     patch.pdf_name = file.name
+    // New chart, new words: store them now, or let the background reader redo it.
+    patch.lyrics = lyrics ?? null
+    patch.lyrics_indexed_at = lyrics !== undefined ? new Date().toISOString() : null
   }
-  const { data, error } = await supabase.from('songs').update(patch).eq('id', song.id).select().single()
+  const { data, error } = await supabase.from('songs').update(patch).eq('id', song.id).select(SONG_COLUMNS).single()
   if (error) {
     if (file) await removeChart(patch.pdf_path ?? null)
     throw friendly(error, input)

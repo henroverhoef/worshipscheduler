@@ -6,7 +6,8 @@ import { fetchMyPeople, fetchNames, matchesPerson, personLabel, type Person } fr
 import { supabase } from '../lib/supabase'
 import { fetchSongs } from '../lib/songs'
 import { shareLink, shareText, shareUrl, songSelectSearchUrl } from '../lib/format'
-import { matchesSong } from './Library'
+import { LyricSnippet, rankSongs } from './Library'
+import { useLyricSearch } from '../lib/lyrics'
 import type { EventRow, Song } from '../lib/types'
 
 interface SetItem {
@@ -548,7 +549,12 @@ interface PickerProps {
 function SongPicker({ library, chosen, onAdd, onCreated, onClose }: PickerProps) {
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
-  const filtered = library.filter((s) => matchesSong(s, query))
+  const filtered = rankSongs(library, query)
+  // Then songs whose words match (for when you remember a line but not the title).
+  const lyricSearch = useLyricSearch(query)
+  const shown = new Set(filtered.map((s) => s.id))
+  const byId = new Map(library.map((s) => [s.id, s]))
+  const lyricOnly = lyricSearch.hits.filter((h) => !shown.has(h.id) && byId.has(h.id))
 
   if (creating) {
     return (
@@ -585,7 +591,7 @@ function SongPicker({ library, chosen, onAdd, onCreated, onClose }: PickerProps)
           className="search"
           type="search"
           autoFocus
-          placeholder="Search library"
+          placeholder="Search by title, artist or lyrics"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -597,6 +603,28 @@ function SongPicker({ library, chosen, onAdd, onCreated, onClose }: PickerProps)
                 <button type="button" className="row-main" onClick={() => onAdd(s)}>
                   <span className="row-title">{s.title}</span>
                   <span className="muted small">{[s.artist, ...s.tags].filter(Boolean).join(' · ')}</span>
+                </button>
+                {s.song_key && <span className="key">{s.song_key}</span>}
+                <span className={`added ${count ? 'on' : ''}`}>{count ? `✓${count > 1 ? count : ''}` : '+'}</span>
+              </li>
+            )
+          })}
+          {query.trim() && (lyricSearch.searching || lyricOnly.length > 0) && (
+            <li className="row picker-section">
+              <span className="row-main muted small">
+                {lyricSearch.searching && !lyricOnly.length ? 'Searching the lyrics…' : 'Found in the lyrics'}
+              </span>
+            </li>
+          )}
+          {lyricOnly.map((h) => {
+            const s = byId.get(h.id)!
+            const count = chosen.filter((c) => c === s.id).length
+            return (
+              <li key={s.id} className="row">
+                <button type="button" className="row-main" onClick={() => onAdd(s)}>
+                  <span className="row-title">{s.title}</span>
+                  <span className="muted small">{s.artist}</span>
+                  <LyricSnippet snippet={h.snippet} query={query} />
                 </button>
                 {s.song_key && <span className="key">{s.song_key}</span>}
                 <span className={`added ${count ? 'on' : ''}`}>{count ? `✓${count > 1 ? count : ''}` : '+'}</span>

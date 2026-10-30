@@ -7,6 +7,8 @@ interface Row {
   id: string
   file: File
   pages: number | null
+  /** The chart's words for lyrics search (undefined until read). */
+  lyrics?: string | null
   title: string
   artist: string
   key: string
@@ -68,6 +70,7 @@ export default function ImportReview({ files, library, onSaved, onClose }: Props
                   : {
                       ...r,
                       pages: d.pages,
+                      lyrics: d.lyrics,
                       key: r.key || d.key || '',
                       tempo: r.tempo || (d.tempo ? String(d.tempo) : ''),
                       timeSig: r.timeSig || d.timeSig || '',
@@ -112,10 +115,11 @@ export default function ImportReview({ files, library, onSaved, onClose }: Props
 
   // What still needs sorting out before saving.
   const problems = useMemo(() => {
-    const out = new Map<string, { library: Song[]; batch: boolean; missingTitle: boolean }>()
+    const out = new Map<string, { library: Song[]; batch: boolean; missingTitle: boolean; missingArtist: boolean }>()
     const kept = rows.filter((r) => r.action !== 'skip' && r.status !== 'done')
     kept.forEach((r, i) => {
       const missingTitle = !r.title.trim()
+      const missingArtist = !r.artist.trim()
       // For a replacement, the song being replaced doesn't count as a clash.
       const clashes = findDuplicates(r.title, r.artist || null, library, r.replaceId ?? undefined)
       // Two files in this import that would be the same song (the later one is flagged).
@@ -125,7 +129,8 @@ export default function ImportReview({ files, library, onSaved, onClose }: Props
         const b = normText(r.artist)
         return !a || !b || a === b
       })
-      if (missingTitle || clashes.length || batch) out.set(r.id, { library: clashes, batch, missingTitle })
+      if (missingTitle || missingArtist || clashes.length || batch)
+        out.set(r.id, { library: clashes, batch, missingTitle, missingArtist })
     })
     return out
   }, [rows, library])
@@ -160,8 +165,8 @@ export default function ImportReview({ files, library, onSaved, onClose }: Props
           const existing = row.replaceId ? byId.get(row.replaceId) : undefined
           const song =
             row.action === 'replace' && existing
-              ? await updateSong(existing, { ...input, notes: existing.notes }, row.file)
-              : await createSong(input, row.file)
+              ? await updateSong(existing, { ...input, notes: existing.notes }, row.file, row.lyrics)
+              : await createSong(input, row.file, row.lyrics)
           onSaved(song)
           setRows((rs) => rs.map((x) => (x.id === row.id ? { ...x, status: 'done' } : x)))
         } catch (e) {
@@ -251,6 +256,7 @@ export default function ImportReview({ files, library, onSaved, onClose }: Props
                       Artist
                       <input
                         list="import-artists"
+                        required
                         value={r.artist}
                         placeholder="e.g. Bethel Music"
                         onChange={(e) => update(r.id, { artist: e.target.value })}
@@ -276,6 +282,7 @@ export default function ImportReview({ files, library, onSaved, onClose }: Props
                     </label>
 
                     {p?.missingTitle && <p className="error small">Give this song a title.</p>}
+                    {p?.missingArtist && !p.missingTitle && <p className="warn small">Add the artist — every song needs one.</p>}
                     {p && p.library.length > 0 && (
                       <div className="dup-note">
                         <p className="small" style={{ margin: 0 }}>

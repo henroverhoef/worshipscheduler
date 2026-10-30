@@ -358,3 +358,12 @@ input[type='file'] { padding: 8px; }
 .replace-note { margin: 0; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
 .import-foot { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+
+/* Library search */
+.library-notes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: -4px 0 12px; }
+.chip-filter { border: 1px solid var(--gold); color: var(--gold); background: transparent; border-radius: 999px; padding: 4px 12px; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+.chip-filter.on { background: var(--gold); color: #fff; }
+.row-main .warn { margin-left: 4px; }
+.lyric-snippet { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 3px; font-style: italic; overflow-wrap: anywhere; }
+.lyric-snippet mark { background: color-mix(in srgb, var(--gold) 35%, transparent); color: var(--text); border-radius: 3px; padding: 0 2px; font-style: normal; }
+.picker-section { background: var(--surface-2); }

@@ -6,6 +6,13 @@ Plan worship sets, share them with your team, and play the chord charts like a m
   opens a review sheet first: each chart gets title, artist, key, BPM, time and tags to check or fill in before anything
   is uploaded. Title and key are guessed from the file name (`Way Maker - E.pdf`, `Goodness of God (Ab).pdf`), and key,
   tempo and time from the chart's own text where it prints them.
+- **Artist required**: every new song needs an artist (the database refuses one without), and so does editing a
+  song's title or artist. Older songs without one are listed under "N songs need an artist" in the Library.
+- **Search, titles first then lyrics**: library and set-editor searches show title matches instantly (exact and
+  starting matches first, then artist/key/tags), and a moment later add "Found in the lyrics" songs with the matching
+  line highlighted. Each chart's words (chord and Nashville-number lines left out) are read from the PDF once: at
+  upload, or in the background in a leader's browser for older charts. Matching ignores spaces and punctuation, so
+  "way maker" also finds "Way ma - ker". Scanned (image-only) PDFs have no words to search.
 - **No duplicate songs**: a song counts as already in the library when the title matches (ignoring case and
   punctuation) and the artist matches or is missing. Such files are flagged until you change the title/artist, replace
   the existing song's chart, or skip them. The database also refuses two songs with the same title and artist.
