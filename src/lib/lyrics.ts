@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { chartUrl, supabase } from './supabase'
+import { cleanLyrics } from './songs'
 
 export interface LyricHit {
   id: string
@@ -93,7 +94,7 @@ export function indexMissingLyrics(onProgress: (done: number, total: number) => 
             }
             await supabase
               .from('songs')
-              .update({ lyrics, lyrics_indexed_at: new Date().toISOString() })
+              .update({ lyrics: cleanLyrics(lyrics) ?? null, lyrics_indexed_at: new Date().toISOString() })
               .eq('id', s.id)
           }
         } catch {

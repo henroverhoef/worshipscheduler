@@ -349,7 +349,8 @@ input[type='file'] { padding: 8px; }
 .import-row.flagged { border-color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
 .import-row.replace { border-color: var(--accent); }
 .import-row.skip { opacity: 0.65; }
-.import-row.done { border-color: color-mix(in srgb, #15803d 50%, var(--border)); }
+.import-row.st-error { border-color: var(--danger); }
+.import-row.st-done { border-color: color-mix(in srgb, #15803d 50%, var(--border)); }
 .import-file { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; font-weight: 600; overflow-wrap: anywhere; }
 .import-file .ok { color: #15803d; font-weight: 700; white-space: nowrap; }
 .import-fields { border: 0; padding: 0; margin: 8px 0 0; gap: 10px; min-width: 0; }

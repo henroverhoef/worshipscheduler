@@ -1,6 +1,10 @@
 import { supabase, CHARTS_BUCKET } from './supabase'
 import type { Song } from './types'
 
+// Control characters (e.g. NULs from odd PDF fonts) can't be stored in the database.
+export const cleanLyrics = (t: string | null | undefined) =>
+  t == null ? t : t.replace(/[\u0000-\u0009\u000B-\u001F\u007F\uFFFD]/g, '') || null
+
 // Everything except the (large) searchable lyrics text.
 const SONG_COLUMNS = 'id, title, artist, song_key, tempo, time_sig, tags, notes, pdf_path, pdf_name, created_at, updated_at'
 
@@ -67,7 +71,7 @@ function friendly(error: { code?: string; message: string }, input: SongInput): 
  */
 export async function createSong(input: SongInput, file: File | null, lyrics?: string | null): Promise<Song> {
   const pdf_path = file ? await uploadChart(file) : null
-  const words = file && lyrics !== undefined ? { lyrics, lyrics_indexed_at: new Date().toISOString() } : {}
+  const words = file && lyrics !== undefined ? { lyrics: cleanLyrics(lyrics), lyrics_indexed_at: new Date().toISOString() } : {}
   const { data, error } = await supabase
     .from('songs')
     .insert({ ...input, pdf_path, pdf_name: file?.name ?? null, ...words })
@@ -89,7 +93,7 @@ export async function updateSong(song: Song, input: SongInput, file: File | null
     patch.pdf_path = await uploadChart(file)
     patch.pdf_name = file.name
     // New chart, new words: store them now, or let the background reader redo it.
-    patch.lyrics = lyrics ?? null
+    patch.lyrics = cleanLyrics(lyrics) ?? null
     patch.lyrics_indexed_at = lyrics !== undefined ? new Date().toISOString() : null
   }
   const { data, error } = await supabase.from('songs').update(patch).eq('id', song.id).select(SONG_COLUMNS).single()

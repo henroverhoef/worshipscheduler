@@ -215,7 +215,7 @@ export default function ImportReview({ files, library, onSaved, onClose }: Props
             const target = r.replaceId ? byId.get(r.replaceId) : undefined
             const locked = r.status === 'done' || r.status === 'saving' || saving
             return (
-              <li key={r.id} className={`import-row ${r.action} ${p ? 'flagged' : ''} ${r.status}`}>
+              <li key={r.id} className={`import-row ${r.action} ${p ? 'flagged' : ''} st-${r.status}`}>
                 <div className="import-file">
                   <span className="grow">
                     📄 {r.file.name}
